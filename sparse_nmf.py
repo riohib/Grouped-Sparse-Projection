@@ -3,7 +3,7 @@ import numpy as np
 import scipy.io
 import pylab as plt
 
-def LinearHoyer(X, r, maxiter, spar, W = None, H = None):
+def sparse_nmf(X, r, maxiter, spar, W = None, H = None):
     """Input data and the rank
     Learns a sparse NMF model given data X and the rank r.
     Parameters
@@ -138,7 +138,7 @@ def sparse_opt(b, k):
 #    spar = 0.3
 #    maxiter = 200
 #    X = scipy.io.loadmat('ORLfaces.mat')  #Modification Rio
-#    W = LinearHoyer(X['M'], r, maxiter, spar)
+#    W = sparse_nmf(X['M'], r, maxiter, spar)
 #    for i in range(r):
 #        plt.subplot(np.sqrt(r), np.sqrt(r), i + 1)
 #        plt.imshow(np.reshape(W.T[i], [92, 112]).T)
