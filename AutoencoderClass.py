@@ -43,12 +43,13 @@ class Autoencoder(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-
-        #======= Sparsity ==========
+        #== (Comment this block out for regular Autoencoder)==
+        #======= Sparsity  ==========
         tmp = self.e1.weight
         tmp2 = sparse(tmp)
         self.e1.weight.data = tmp2
-
+        
+        #======= Regular Autoencoder Below ==========
         # encode
         x = self.relu(self.e1(x))
         x = self.relu(self.e2(x))
