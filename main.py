@@ -66,6 +66,21 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
         loss_array.append(loss)
+        
+        # ===================Sparsity Enforcement====================
+        # x_in = model.e1.weight.detach().numpy()
+        # spar = 0.6
+        # m = len(x_in[0])
+        # k = np.sqrt(m) - spar * (np.sqrt(m) - 1)
+        # x_sparse = np.zeros(np.shape(x_in))
+        # #import ipdb
+        # #ipdb.set_trace()
+        # for i in range(len(x_in)):
+        #     x_sparse[i] = sparse_opt(x_in[i], k)
+        #
+        # #x_sparse = LinearHoyer(x_in, 784, 150, 0.9)
+        # cw = torch.tensor(x_sparse, dtype=torch.float32, requires_grad=True)
+        # model.e1.weight.data = cw
     # ===================log========================
     print('epoch [{}/{}], loss:{:.4f}'.format(epoch + 1, num_epochs, loss.data))
     if epoch % 10 == 0:
