@@ -1,12 +1,2 @@
-# GSP
-Group Sparse Projection
+For the Autoencoder experiments, running the main file in the autoencoder folder should be able to generate the experiments. To change the sparsity valuer, it has to be manually set inside the gsp function like before.
 
-main.py contains the training loop and data processing.
-
-Autoencoder.py :
-Contains the autoencoder class and also calls the sparsity from the projections.py
-The sparsity (projection) is called from the "forward" method within the class.
-
-I also tried projection in the training loop. 
-That can be tried by uncommenting the sparsity block in the training loop,
-and commenting the sparsity block in forward method.
