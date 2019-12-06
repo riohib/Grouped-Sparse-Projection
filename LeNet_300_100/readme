@@ -1,1 +1,6 @@
+The GSP Algorithm is contained in the gs_projection.py file.
+
+For the LeNet 300 experiments, running the LeNet300.py file should be able to generate the Neural Network experiments on this model. The sparsity value has to be manually changed within the script in the gsp function of this script.
+
+
 
