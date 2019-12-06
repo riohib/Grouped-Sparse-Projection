@@ -12,6 +12,8 @@ Vamsi K. Potluru, Sergey M. Plis, Jonathan Le Roux, Barak A. Pearlmutter, Vince 
 
 available here: https://github.com/ismav/sparseNMF
 
+
+### Folders and files
 ```
 ./                                - Top directory.
 ./README.md                       - This is the readme file.
