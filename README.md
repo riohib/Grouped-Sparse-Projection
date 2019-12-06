@@ -13,8 +13,19 @@ Vamsi K. Potluru, Sergey M. Plis, Jonathan Le Roux, Barak A. Pearlmutter, Vince 
 available here: https://github.com/ismav/sparseNMF
 
 ```
-Hello
-```
-
-
-
+./                                - Top directory.
+./README.md                       - This is the readme file.
+./license.md                      - The license for the repository.
+|LeNet_300_100/                   - Contains the python source files for the Sparse LeNet 300-100 experiments.
+    |--- LeNet300.py              - main driver function. Run these to generate results.
+    |--- gs_projection.py         - Contains the GSP algorithm.
+    |--- helper.py                - contains some helper functions for various calculations.
+    |--- readme.md                - specific readme for the directory.
+    
+|Sparse_Autoencoders/   - Contains the python source files for the Sparse Autoencoder experiments.
+    |--- main.py.                 - main driver function. Run these to generate results.
+    |--- gs_projection.py         - Contains the GSP algorithm.
+    |--- AutoencoderSimple.py     - Contains the Autoencoder model Class.
+    |--- helper.py                - contains some helper functions for various calculations.
+    |--- readme.md                - specific readme for the directory.
+    
