@@ -8,7 +8,8 @@ In this paper, we design a new sparse projection method for a set of vectors in 
 
 This work supersedes the work by 
 
-Vamsi K. Potluru, Sergey M. Plis, Jonathan Le Roux, Barak A. Pearlmutter, Vince D. Calhoun, Thomas P. Hayes
+Vamsi K. Potluru, Sergey M. Plis, Jonathan Le Roux, Barak A. Pearlmutter, Vince D. Calhoun, Thomas P. Haye.
+
 available here: https://github.com/ismav/sparseNMF
 
 
