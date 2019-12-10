@@ -5,7 +5,7 @@ Paper Link: https://arxiv.org/abs/1912.03896
 
 Authors: Nicolas Gillis, Riyasat Ohib, Sergey Plis, Vamsi Potluru.
 
-In this paper, we design a new sparse projection method for a set of vectors in order to achieve a desired average level of sparsity which is measured using the ratio of the l1 and l2 norms.
+In this paper, we design a new sparse projection method for a set of vectors in order to achieve a desired average level of sparsity which is measured using the ratio of the $l_1$ and $l_2$ norms.
 
 The MATLAB implementation of the GSP Algorithm and the experiments are available at the site:
  https://sites.google.com/site/nicolasgillis/code
