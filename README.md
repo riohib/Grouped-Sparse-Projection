@@ -1,6 +1,7 @@
 # GSP
 
 ### Python source files for the paper: Grouped Sparse Projection.
+Paper Link: https://arxiv.org/abs/1912.03896
 
 Authors: Nicolas Gillis, Riyasat Ohib, Sergey Plis, Vamsi Potluru.
 
