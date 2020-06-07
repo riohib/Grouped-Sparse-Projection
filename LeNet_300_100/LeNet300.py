@@ -9,6 +9,7 @@ import logging
 
 from helper import *
 
+## New Post Conf
 
 #******************** Result Directories **************************
 if not os.path.exists('./Loss'):
