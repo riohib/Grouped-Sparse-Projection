@@ -52,7 +52,7 @@ input_size = 784
 hidden_size1 = 300
 hidden_size2 = 100
 num_classes = 10
-num_epochs = 5
+num_epochs = 10
 batch_size = 100
 learning_rate = 0.001
 
@@ -88,7 +88,7 @@ class Net(nn.Module):
         x = F.relu(self.e1(x))
         x = F.relu(self.e2(x))
         x = self.e3(x)
-        return F.softmax(x, dim=1)
+        return F.log_softmax(x, dim=1)
 
 
 # model = NeuralNet(input_size, hidden_size1, hidden_size2, num_classes).to(device)

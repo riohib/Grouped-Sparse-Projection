@@ -1,0 +1,4 @@
+/LeNet_300_100/__pycache__
+
+*.log
+*.pth

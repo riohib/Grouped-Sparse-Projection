@@ -1,5 +1,4 @@
-from AutoencoderSimple import Autoencoder
-from projection import sparse_opt
+# from projection import sparse_opt
 from gs_projection import *
 
 import logging

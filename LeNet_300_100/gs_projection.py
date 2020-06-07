@@ -3,6 +3,7 @@ import numpy as np
 from numpy import linalg as LA
 import pickle
 import scipy.io
+import logging
 
 
 def sparsity(matrix):
@@ -10,12 +11,12 @@ def sparsity(matrix):
 
     spx = 0
     for i in range(r):
-        if all(matrix[:,1] == 0):
+        if matrix[:,1].sum() == 0:
             spx = 1
         else:
             ni = matrix.shape[0]
             spx = spx + ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-
+            # spx = spx + ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
     spx = spx/r
     return spx
 
@@ -58,7 +59,7 @@ def gmu(matrix, mu = 0):
             ev = np.ones((nip, 1))
 
             term2 = np.power(np.sum(ev.T * xp_vec[indtp, i], axis=1), 2)
-            gradg = gradg + np.power(betai, 2) * (-nip * np.power(f2, -1) + term2 * np.power(f2, -3))
+            gradg = gradg + np.power(betai, 2) * (-nip * np.power(f2, -1) + term2 * np.power(f2, -3)) 
 
         if indtp.size != 0:
             normVect = LA.norm(xp_vec[:, i])
@@ -76,7 +77,7 @@ def gmu(matrix, mu = 0):
 
 
 def groupedsparseproj(matrix, sparsity, itr, precision=1e-6, linrat=0.9):
-
+    epsilon = 10e-15
     k = 0
     muup0 = 0
     r = matrix.shape[1]  # No of Columns
@@ -122,10 +123,16 @@ def groupedsparseproj(matrix, sparsity, itr, precision=1e-6, linrat=0.9):
         gnew = glow
         gpnew = gradg         # g'(0)
         delta = muup - mulow
+        switch  = True 
 
         while abs(gnew - k) > precision * r and numiter < 100:
             oldmu = newmu
-            newmu = oldmu + (k - gnew) / (gpnew)
+            newmu = oldmu + (k - gnew) / (gpnew + epsilon) 
+            
+            # if (itr % 25 == 0) and switch:
+            #     logging.debug("newmu: %.4f | oldmu: %.4f | k: %.4f | gnew: %.4f |  gpnew: %.4f |\n" % 
+            #             (newmu, oldmu, k, gnew, gpnew))
+            #     switch = False
 
             if (newmu >= muup) or (newmu <= mulow): #If Newton goes out of the interval, use bisection
                 newmu = (mulow+muup)/2
