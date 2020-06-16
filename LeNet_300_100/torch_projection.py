@@ -114,9 +114,6 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
     ni = matrix.shape[0]
 
     for i in range(r):
-        # matrix_sign = np.sign(matrix)
-        # pos_matrix = matrix_sign * matrix
-        # ni = matrix.shape[0]
         k = k + np.sqrt(ni)/(np.sqrt(ni) - 1)
         # check critical values of mu where g(mu) is discontinuous, that is,
         # where the two (or more) largest entries of x{i} are equal to one another.
@@ -128,7 +125,6 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
         muup0 = max(muup0, max_xi * (np.sqrt(ni)-1))
         critmu = torch.tensor(critval_list) * (np.sqrt(ni) - 1)
 
-
     k = k - r * sps
     vgmu, xp_vec, gradg  = gmu(pos_matrix, 0)
 
@@ -136,9 +132,8 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
     if vgmu < k:
         xp_mat = matrix
         gxpmu = vgmu
-        muup = muup0
         numiter = 0
-        # return xp_mat
+        return xp_mat
     else:
         numiter = 0
         mulow = 0
@@ -154,12 +149,13 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
 
         while abs(gnew - k) > precision * r and numiter < 100:
             oldmu = newmu
+            # % Secant method: 
+            # % newmu = mulow + (k-glow)*(muup-mulow)/(gup-glow);
+
+            # % Bisection: 
+            # % newmu = (muup+mulow)/2;
+            # % Newton: 
             newmu = oldmu + (k - gnew) / (gpnew + epsilon) 
-            
-            # if (itr % 25 == 0) and switch:
-            #     logging.debug("newmu: %.4f | oldmu: %.4f | k: %.4f | gnew: %.4f |  gpnew: %.4f |\n" % 
-            #             (newmu, oldmu, k, gnew, gpnew))
-            #     switch = False
 
             if (newmu >= muup) or (newmu <= mulow): #If Newton goes out of the interval, use bisection
                 newmu = (mulow+muup)/2
@@ -176,7 +172,7 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
                 mulow = xnew
                 mulow = newmu
 
-            # Garantees linear convergence
+            # Guarantees linear convergence
             if (muup - mulow) > linrat * delta and abs(oldmu-newmu) < (1-linrat)* delta:
                 newmu = (mulow + muup) / 2
                 gnew, xnew, gpnew = gmu(matrix, newmu)
@@ -199,11 +195,12 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
                 gxpmu = gnew
         try:
             xp_vec = xnew
+            # print(' xp_vec = xnew')
         except:
             scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
             
         gxpmu = gnew
-    
+
     # pdb.set_trace()
 
     alpha = torch.zeros([1, matrix.shape[1]])
