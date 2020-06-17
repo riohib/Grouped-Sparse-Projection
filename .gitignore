@@ -2,3 +2,20 @@
 
 *.log
 *.pth
+*.pyc
+*.mat
+*.txt
+*.out
+*.err
+*.md
+*.sh
+
+models.py
+prune.py
+quantization.py
+AutoencoderSimple.py
+gs_projection.py
+main.py
+projection.py
+readme
+huffmancoding.py

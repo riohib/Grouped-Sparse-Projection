@@ -1,6 +1,3 @@
-# from projection import sparse_opt
-from gs_projection import *
-
 import logging
 #************************* Imports *************************
 
@@ -18,6 +15,7 @@ from numpy import linalg as LA
 from matplotlib import pyplot as plt
 import numpy as np
 import pickle
+from torch_projection import *
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -25,7 +23,8 @@ torch.manual_seed(0)
 #************************* Imports *************************
 
 logging.basicConfig(filename='LogFile.log', level=logging.DEBUG)
-
+# Device configuration
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 list = []
 nan_list = []
@@ -70,4 +69,100 @@ def to_img(x):
     x = x.view(x.size(0), 1, 28, 28)
     return x
 
+def sparsity_np(matrix):
+    r =  matrix.shape[1] # no of vectors
+    spx = 0
+    spxList = []
+    for i in range(r):
+        if matrix[:,i].sum() == 0:
+            spx = 1
+            spxList.append(spx)
+        else:
+            ni = matrix.shape[0]
+            spx = ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
+            # spx = ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
+            spxList.append(spx)            
+        spx = sum(spxList)/r
+    return spx
 
+def sparsity_torch(matrix):
+    r =  matrix.shape[1] # no of vectors
+    spx = 0
+    spxList = []
+    for i in range(r):
+        if matrix[:,i].sum() == 0:
+            spx = 1
+            spxList.append(spx)
+        else:
+            ni = matrix.shape[0]
+            #spx = ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
+            spx = ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
+            spxList.append(spx)            
+        spx = sum(spxList)/r
+    return spx
+
+def LeNet300_sps(model):
+    pDict = {} 
+    for name, pA in model.named_parameters(): 
+        pDict.update({name : pA})
+    
+    p_size = [] 
+    for items in paramList: 
+        p_size.append(items.size()) 
+
+def parameter_prune(model, threshold = 2.5e-2):
+    l1 = model.fc1.weight 
+    l2 = model.fc2.weight 
+    l3 = model.fc3.weight
+
+    numel1 = (l1 < threshold).nonzero()
+    numel2 = (l2 < threshold).nonzero()
+    numel3 = (l3 < threshold).nonzero()
+
+    pruned1 = numel1.shape[0]
+    pruned2 = numel2.shape[0]
+    pruned3 = numel3.shape[0]
+
+    left1 = l1.numel() - pruned1
+    left2 = l2.numel() - pruned2
+    left3 = l3.numel() - pruned3
+
+    pct1 = left1/l1.numel()
+    pct2 = left2/l2.numel()
+    pct3 = left3/l3.numel()
+    
+    print('Parameter Left Layer 1: ' + str(left1) + ' Percentage: ' + str(pct1))
+    print('Parameter Left from Layer 2: ' + str(left2) + ' Percentage: ' + str(pct2))
+    print('Parameter Left from Layer 3: ' + str(left3) + ' Percentage: ' + str(pct3))
+
+def model_prune(model, threshold = 2.3e-2):
+    # for name, p in model.named_parameters():
+    #     if 'mask' in name:
+    #         continue
+    pDict = {} 
+    for name, pA in model.named_parameters(): 
+        pDict.update({name : pA})
+    
+    keys = ['fc1.weight','fc2.weight','fc3.weight']
+    
+    for k in keys:
+        print(k)
+        tensor = pDict[k].data.cpu().numpy()
+        tensor = np.where(tensor < threshold, 0, tensor)
+        pDict[k].data = torch.from_numpy(tensor).to(device)
+
+def fix_zeros(model):
+    # for name, p in model.named_parameters():
+    #     if 'mask' in name:
+    #         continue
+
+    pDict = {} 
+    for name, pA in model.named_parameters(): 
+        pDict.update({name : pA})
+    keys = ['fc1.weight','fc2.weight','fc3.weight']
+
+    for k in keys:
+        tensor = pDict[k].data.cpu().numpy()
+        grad_tensor = pDict[k].grad.data.cpu().numpy()
+        grad_tensor = np.where(tensor==0, 0, grad_tensor)
+        pDict[k].grad.data = torch.from_numpy(grad_tensor).to(device)

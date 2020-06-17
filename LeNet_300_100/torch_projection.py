@@ -6,6 +6,7 @@ import scipy.io
 import logging
 import pdb
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def sparsity(matrix):
     r =  matrix.shape[1] # no of vectors
@@ -40,38 +41,38 @@ def checkCritical(vector, critval_list, precision = 1e-6):
 
 
 def gmu(matrix, mu = 0):
- 
     vgmu = 0
     gradg = 0
     matrix = torch.abs(matrix)
-    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]])
-    # print('Value of my: '+ str(mu))
+    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     glist = []
 
     gsp_iter = 0
     for i in range(matrix.shape[1]):
         ni = matrix[:,i].shape[0]
-        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float64))  - 1)
-        #xp_vec = np.concatenate((xp_vec, (matrix[:, i] - mu * betai).reshape(-1, 1)), axis=1)
-        xp_vec[:, i] = matrix[:, i] - mu * betai
+        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float64, device = device))  - 1)
+        
+        xp_vec[:, i] = matrix[:, i] - (mu * betai) #.to(device)
         indtp = torch.where(xp_vec[:, i] > 0)[0]
 
         xp_vec[:, i] = torch.relu(xp_vec[:, i])
-        # xp_vec[:, i] = torch.max(0, xp_vec[:, i])
 
         # Save xp_vec:
         gsp_iter += 1
-        # print("GSP Iter: " + str(gsp_iter))
+        
         # Outputs
         f2 = torch.norm(xp_vec[:,i])
         if f2 > 0:
             nip = len(indtp)  #may be needs change here
-            ev = torch.ones((nip, 1))
+            ev = torch.ones((nip, 1), device = device)
 
             term2 = torch.pow(torch.matmul(ev.T, xp_vec[indtp, i]), 2)
-            new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
-            gradg = gradg + new_grad
-            glist.append(new_grad.item())
+            # new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
+            # gradg = gradg + new_grad
+            # glist.append(new_grad.item())
+            
+            gradg = gradg + torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
+            # glist.append(new_grad.item())
 
         if indtp.numel() != 0:
             vec_norm = torch.norm(xp_vec[:, i])
@@ -106,6 +107,7 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
     critmu = torch.tensor([])
     critval_list = []
 
+    vgmu = torch.zeros(1, device=device)
     # maxxi_list = []
 
     # These operations were inside the loop, but doesn't need to be.
@@ -203,7 +205,7 @@ def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
 
     # pdb.set_trace()
 
-    alpha = torch.zeros([1, matrix.shape[1]])
+    alpha = torch.zeros([1, matrix.shape[1]], device = device)
     for i in range(r):
         alpha[0, i] = torch.matmul(xp_vec[:, i], pos_matrix[:, i])
         xp_vec[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_vec[:, i])
