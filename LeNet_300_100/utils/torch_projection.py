@@ -50,7 +50,7 @@ def gmu(matrix, mu = 0):
     gsp_iter = 0
     for i in range(matrix.shape[1]):
         ni = matrix[:,i].shape[0]
-        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float64, device = device))  - 1)
+        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float32, device = device))  - 1)
         
         xp_vec[:, i] = matrix[:, i] - (mu * betai) #.to(device)
         indtp = torch.where(xp_vec[:, i] > 0)[0]
@@ -70,9 +70,10 @@ def gmu(matrix, mu = 0):
             # new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
             # gradg = gradg + new_grad
             # glist.append(new_grad.item())
+            new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
+            gradg = gradg + new_grad
             
-            gradg = gradg + torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
-            # glist.append(new_grad.item())
+            glist.append(new_grad.item())
 
         if indtp.numel() != 0:
             vec_norm = torch.norm(xp_vec[:, i])
@@ -85,8 +86,8 @@ def gmu(matrix, mu = 0):
             # glist.append((betai * torch.sum(xp_vec[:, i])).item() )
 
         else:
-            im = torch.argmax(matrix[:, 0])
-            xp_vec[im, i] = 1
+            # im = torch.argmax(matrix[:, i])
+            xp_vec[0, i] = 1
             vgmu = vgmu + betai
             # glist.append(betai.item())
         
@@ -96,7 +97,7 @@ def gmu(matrix, mu = 0):
     return vgmu, xp_vec, gradg
 
 
-def groupedsparseproj(matrix, sps, itr, precision=1e-6, linrat=0.9):
+def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
     
     epsilon = 10e-15
@@ -218,6 +219,12 @@ def load_matrix_debug():
     return matrix
 
 ## ********************************************************************************** ##
+matrix = load_matrix_debug()
+start_time = time.time()
+
+X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+print("--- %s seconds ---" % (time.time() - start_time))
+
 
 # r = 100
 # n = 10000
