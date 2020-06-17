@@ -7,6 +7,7 @@ import logging
 import pdb
 import time
 
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def sparsity(matrix):
@@ -228,11 +229,11 @@ def load_matrix_debug():
 
 ## ********************************************************************************** ##
 
-matrix = load_matrix_debug()
-start_time = time.time()
-itr = 0
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# matrix = load_matrix_debug()
+# start_time = time.time()
+# itr = 0
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 # r = 100
 # n = 10000

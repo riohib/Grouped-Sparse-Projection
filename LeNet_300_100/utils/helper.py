@@ -15,7 +15,9 @@ from numpy import linalg as LA
 from matplotlib import pyplot as plt
 import numpy as np
 import pickle
-from torch_projection import *
+
+import utils.torch_projection as gsp_reg
+import utils.vec_projection as gsp_vec
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -68,38 +70,6 @@ def to_img(x):
     x = x.clamp(0, 1)
     x = x.view(x.size(0), 1, 28, 28)
     return x
-
-def sparsity_np(matrix):
-    r =  matrix.shape[1] # no of vectors
-    spx = 0
-    spxList = []
-    for i in range(r):
-        if matrix[:,i].sum() == 0:
-            spx = 1
-            spxList.append(spx)
-        else:
-            ni = matrix.shape[0]
-            spx = ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            # spx = ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            spxList.append(spx)            
-        spx = sum(spxList)/r
-    return spx
-
-def sparsity_torch(matrix):
-    r =  matrix.shape[1] # no of vectors
-    spx = 0
-    spxList = []
-    for i in range(r):
-        if matrix[:,i].sum() == 0:
-            spx = 1
-            spxList.append(spx)
-        else:
-            ni = matrix.shape[0]
-            #spx = ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            spx = ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            spxList.append(spx)            
-        spx = sum(spxList)/r
-    return spx
 
 def LeNet300_sps(model):
     pDict = {} 

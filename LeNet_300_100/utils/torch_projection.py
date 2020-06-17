@@ -5,6 +5,7 @@ import pickle
 import scipy.io
 import logging
 import pdb
+import time
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -218,12 +219,12 @@ def load_matrix_debug():
         matrix  = pickle.load(fpA)
     return matrix
 
-## ********************************************************************************** ##
-matrix = load_matrix_debug()
-start_time = time.time()
+# ## ********************************************************************************** ##
+# matrix = load_matrix_debug()
+# start_time = time.time()
 
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 
 # r = 100
