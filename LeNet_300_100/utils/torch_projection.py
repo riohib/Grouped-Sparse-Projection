@@ -9,63 +9,61 @@ import time
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+
 def sparsity(matrix):
-    r =  matrix.shape[1] # no of vectors
+    r = matrix.shape[1]  # no of vectors
 
     spx = 0
     spxList = []
     for i in range(r):
-        if matrix[:,i].sum() == 0:
+        if matrix[:, i].sum() == 0:
             spx = 1
             spxList.append(spx)
             print('here')
         else:
             ni = matrix.shape[0]
-            # spx + ( np.sqrt(ni) - LA.norm(matrix[:, i], 1)/LA.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            spx = ( np.sqrt(ni) - torch.norm(matrix[:, i], 1)/torch.norm(matrix[:, i], 2)) / (np.sqrt(ni)-1)
-            spxList.append(spx)            
-        spx = sum(spxList)/r
+            spx = (np.sqrt(ni) - torch.norm(matrix[:, i], 1) / torch.norm(matrix[:, i], 2)) / (np.sqrt(ni) - 1)
+            spxList.append(spx)
+        spx = sum(spxList) / r
 
     return spx
 
 
-def checkCritical(vector, critval_list, precision = 1e-6):
-
+def checkCritical(vector, critval_list, precision=1e-6):
     max_element = max(vector).item()
     num_crit_points = torch.sum(abs(vector - max_element) < precision)
-    
+
     if num_crit_points > 1:
         critval_list.append(max_element)
         print('Crit Point!')
-    
+
     return critval_list, max_element
 
 
-def gmu(matrix, mu = 0):
+def gmu(matrix, xp_vec, mu=0):
     vgmu = 0
     gradg = 0
     matrix = torch.abs(matrix)
-    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     glist = []
 
     gsp_iter = 0
     for i in range(matrix.shape[1]):
-        ni = matrix[:,i].shape[0]
-        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float32, device = device))  - 1)
-        
-        xp_vec[:, i] = matrix[:, i] - (mu * betai) #.to(device)
+        ni = matrix[:, i].shape[0]
+        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float32, device=device)) - 1)
+
+        xp_vec[:, i] = matrix[:, i] - (mu * betai)  # .to(device)
         indtp = torch.where(xp_vec[:, i] > 0)[0]
 
         xp_vec[:, i] = torch.relu(xp_vec[:, i])
 
         # Save xp_vec:
         gsp_iter += 1
-        
+
         # Outputs
-        f2 = torch.norm(xp_vec[:,i])
+        f2 = torch.norm(xp_vec[:, i])
         if f2 > 0:
-            nip = len(indtp)  #may be needs change here
-            ev = torch.ones((nip, 1), device = device)
+            nip = len(indtp)  # may be needs change here
+            ev = torch.ones((nip, 1), device=device)
 
             term2 = torch.pow(torch.matmul(ev.T, xp_vec[indtp, i]), 2)
             # new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
@@ -73,25 +71,25 @@ def gmu(matrix, mu = 0):
             # glist.append(new_grad.item())
             new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
             gradg = gradg + new_grad
-            
+
             glist.append(new_grad.item())
 
         if indtp.numel() != 0:
             vec_norm = torch.norm(xp_vec[:, i])
-        
+
             if vec_norm == 0:
                 scipy.io.savemat('norm_zero.mat', mdict={'arr': xp_vec})
 
-            xp_vec[:, i] = xp_vec[:, i]/vec_norm
+            xp_vec[:, i] = xp_vec[:, i] / vec_norm
             vgmu = vgmu + betai * torch.sum(xp_vec[:, i])
             # glist.append((betai * torch.sum(xp_vec[:, i])).item() )
 
         else:
-            # im = torch.argmax(matrix[:, i])
-            xp_vec[0, i] = 1
+            im = torch.argmax(matrix[:, i])
+            xp_vec[im, i] = 1
             vgmu = vgmu + betai
             # glist.append(betai.item())
-        
+
         # if torch.isnan(xp_vec[:, i]).sum():
         #     pdb.set_trace()
 
@@ -100,7 +98,7 @@ def gmu(matrix, mu = 0):
 
 def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
-    
+
     epsilon = 10e-15
     k = 0
     muup0 = 0
@@ -115,23 +113,23 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     # These operations were inside the loop, but doesn't need to be.
     matrix_sign = torch.sign(matrix)
     pos_matrix = matrix_sign * matrix
+    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     ni = matrix.shape[0]
 
     for i in range(r):
-        k = k + np.sqrt(ni)/(np.sqrt(ni) - 1)
+        k = k + np.sqrt(ni) / (np.sqrt(ni) - 1)
         # check critical values of mu where g(mu) is discontinuous, that is,
         # where the two (or more) largest entries of x{i} are equal to one another.
 
-        critical_val, max_xi = checkCritical(pos_matrix[:,i], critval_list)
-        
+        critical_val, max_xi = checkCritical(pos_matrix[:, i], critval_list)
+
         # maxxi_list.append(max_xi)
 
-        muup0 = max(muup0, max_xi * (np.sqrt(ni)-1))
+        muup0 = max(muup0, max_xi * (np.sqrt(ni) - 1))
         critmu = torch.tensor(critval_list) * (np.sqrt(ni) - 1)
 
     k = k - r * sps
-    vgmu, xp_vec, gradg  = gmu(pos_matrix, 0)
-
+    vgmu, xp_vec, gradg = gmu(pos_matrix, xp_vec, 0)
 
     if vgmu < k:
         xp_mat = matrix
@@ -147,25 +145,24 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
         # slope at zero is rather steep while it is gets falt for large mu
         newmu = 0
         gnew = glow
-        gpnew = gradg         # g'(0)
+        gpnew = gradg  # g'(0)
         delta = muup - mulow
-        switch  = True 
+        switch = True
 
         while abs(gnew - k) > precision * r and numiter < 100:
             oldmu = newmu
-            # % Secant method: 
+            # % Secant method:
             # % newmu = mulow + (k-glow)*(muup-mulow)/(gup-glow);
 
-            # % Bisection: 
+            # % Bisection:
             # % newmu = (muup+mulow)/2;
-            # % Newton: 
-            newmu = oldmu + (k - gnew) / (gpnew + epsilon) 
+            # % Newton:
+            newmu = oldmu + (k - gnew) / (gpnew + epsilon)
 
-            if (newmu >= muup) or (newmu <= mulow): #If Newton goes out of the interval, use bisection
-                newmu = (mulow+muup)/2
-            
-            # print( 'Value of numiter: ' + str(numiter))
-            gnew, xnew, gpnew = gmu(matrix, newmu)
+            if (newmu >= muup) or (newmu <= mulow):  # If Newton goes out of the interval, use bisection
+                newmu = (mulow + muup) / 2
+
+            gnew, xnew, gpnew = gmu(matrix, xp_vec, newmu)
 
             if gnew < k:
                 gup = gnew
@@ -177,9 +174,9 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
                 mulow = newmu
 
             # Guarantees linear convergence
-            if (muup - mulow) > linrat * delta and abs(oldmu-newmu) < (1-linrat)* delta:
+            if (muup - mulow) > linrat * delta and abs(oldmu - newmu) < (1 - linrat) * delta:
                 newmu = (mulow + muup) / 2
-                gnew, xnew, gpnew = gmu(matrix, newmu)
+                gnew, xnew, gpnew = gmu(matrix, xp_vec, newmu)
 
                 if gnew < k:
                     gup = gnew
@@ -192,8 +189,8 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
                 numiter += 1
             numiter += 1
 
-            if critmu.shape[0] != 0 and abs(mulow-muup) < abs(newmu)*precision and \
-                                min( abs(newmu - critmu) ) < precision*newmu:
+            if critmu.shape[0] != 0 and abs(mulow - muup) < abs(newmu) * precision and \
+                    min(abs(newmu - critmu)) < precision * newmu:
                 print('The objective function is discontinuous around mu^*.')
                 xp = xnew
                 gxpmu = gnew
@@ -202,30 +199,33 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
             # print(' xp_vec = xnew')
         except:
             scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
-            
+
         gxpmu = gnew
 
     # pdb.set_trace()
 
-    alpha = torch.zeros([1, matrix.shape[1]], device = device)
+    alpha = torch.zeros([1, matrix.shape[1]], device=device)
     for i in range(r):
         alpha[0, i] = torch.matmul(xp_vec[:, i], pos_matrix[:, i])
         xp_vec[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_vec[:, i])
 
     return xp_vec
 
+
 def load_matrix_debug():
-    with open("test_matrix.txt", "rb") as fpA:   #Pickling
-        matrix  = pickle.load(fpA)
+    with open("test_matrix.txt", "rb") as fpA:  # Pickling
+        matrix = pickle.load(fpA)
     return matrix
 
+
 # ## ********************************************************************************** ##
-# matrix = load_matrix_debug()
-# start_time = time.time()
-
-# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-# print("--- %s seconds ---" % (time.time() - start_time))
-
+matrix = load_matrix_debug()
+start_time = time.time()
+sps = 0.9
+precision = 1e-6
+linrat = 0.9
+X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+print("--- %s seconds ---" % (time.time() - start_time))
 
 # r = 100
 # n = 10000
