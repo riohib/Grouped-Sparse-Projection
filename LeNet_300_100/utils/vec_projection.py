@@ -39,8 +39,8 @@ def checkCritical(matrix, critval_list, precision = 1e-6):
     num_crit_points = torch.sum(ind_crit_bool, dim=0)
     
     # Boolean of vector cols with non-trivial critical values
-    crit_cols = torch.where(num_crit_points.float() > 1, torch.ones(matrix.shape[1]), \
-                torch.zeros(matrix.shape[1]))
+    crit_cols = torch.where(num_crit_points.float() > 1, torch.ones(matrix.shape[1], device=device), \
+                torch.zeros(matrix.shape[1],device=device) )
 
     # getting non-trivial critical values
     critval_list = max_elems[crit_cols.bool()] 
@@ -48,11 +48,11 @@ def checkCritical(matrix, critval_list, precision = 1e-6):
     return critval_list, max_elems
 
 
-def gmu(matrix, mu = 0):
+def gmu(matrix, xp_mat, mu = 0):
     vgmu = 0
     gradg = 0
     matrix = torch.abs(matrix)
-    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
+    xp_mat = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     glist = []
 
     gsp_iter = 0
@@ -68,41 +68,42 @@ def gmu(matrix, mu = 0):
 
     # outputs
     mnorm = torch.norm(xp_mat, dim=0)
+    mnorm_inf = mnorm.clone()
+    mnorm_inf[mnorm_inf==0] = float("Inf")
 
+    col_norm_mask =  (mnorm > 0)
+    mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
      
     nip = torch.sum(xp_mat > 0, dim=0) #columnwise number of values > 0
 
     # needs the if condition mnorm> 0 (it's included)
     # Terms in the Gradient Calculation
     term2 = torch.pow(torch.sum(xp_mat, dim=0),2)
-    mnorm_inv = torch.pow(mnorm, -1)
-    mnorm_inv3 = torch.pow(mnorm, -3)
+    mnorm_inv = torch.pow(mnorm_inf, -1)
+    mnorm_inv3 = torch.pow(mnorm_inf, -3)
 
     # The column vectors with norm mnorm == 0 zero, should not contribute to the gradient sum.
     # In the published algorithm, we only calculate gradients for condition: mnorm> 0
     # To vectorize, we include in the matrix columns where mnorm == 0, but we manually replace
     # the inf after divide by zero with 0, so that the grad of that column becomes 0 and 
     # doesn't contribute to the sum.
-    mnorm_inv[torch.isinf(mnorm_inv)] = 0
-    mnorm_inv3[torch.isinf(mnorm_inv3)] = 0
+    # mnorm_inv[torch.isinf(mnorm_inv)] = 0
+    # mnorm_inv3[torch.isinf(mnorm_inv3)] = 0
 
     # Calculate Gradient
     gradg_mat = torch.pow(betai, 2) * (-nip * mnorm_inv +  term2 * mnorm_inv3)
     gradg = torch.sum(gradg_mat)
 
     # vgmu calculation
-    xp_mat /= mnorm
+    ## When indtp is not empty (the columns whose norm are not zero)
+    # xp_mat /= mnorm
+    xp_mat[:,col_norm_mask] /= mnorm[col_norm_mask]
+    
+    ## When indtp IS empty (the columns whose norm ARE zero)
+    max_elem_rows = torch.argmax(matrix, dim=0)[~col_norm_mask]  #The Row Indices where maximum of that column occurs
+    xp_mat[ max_elem_rows, ~col_norm_mask] = 1
 
-    # in the case of a zero column vector
-    if torch.sum(mnorm == 0.0) and torch.sum(torch.isnan(xp_mat)): 
-        nan_id = torch.isnan(xp_mat)
-        col_nans = torch.sum(torch.isnan(xp_mat), dim=0) > 0
-        col_idx = torch.where(col_nans == True)[0] 
-
-        xp_mat[torch.isnan(xp_mat)] = 0 #replace all (divide 0 =nan) with 1's so that only the contribution 
-                                        #of betai is taken!
-        xp_mat[0,col_idx] = torch.tensor(1, dtype = xp_mat.dtype ) 
-
+    # vgmu computation
     vgmu_mat = betai * torch.sum(xp_mat, dim=0)
     vgmu = torch.sum(vgmu_mat)
 
@@ -126,6 +127,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     # These operations were inside the loop, but doesn't need to be.
     matrix_sign = torch.sign(matrix)
     pos_matrix = matrix_sign * matrix
+    xp_mat = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     ni = matrix.shape[0]
 
     #-------------------------------------------------------------------------------
@@ -138,7 +140,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     critmu = torch.tensor(critval_list) * (np.sqrt(ni) - 1)
 
     k = k - r * sps
-    vgmu, xp_vec, gradg  = gmu(pos_matrix, 0)
+    vgmu, xp_mat, gradg  = gmu(pos_matrix, xp_mat, 0)
 
 
     if vgmu < k:
@@ -173,7 +175,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
                 newmu = (mulow+muup)/2
             
             # print( 'Value of numiter: ' + str(numiter))
-            gnew, xnew, gpnew = gmu(matrix, newmu)
+            gnew, xnew, gpnew = gmu(matrix, xp_mat, newmu)
 
             if gnew < k:
                 gup = gnew
@@ -187,7 +189,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
             # Guarantees linear convergence
             if (muup - mulow) > linrat * delta and abs(oldmu-newmu) < (1-linrat)* delta:
                 newmu = (mulow + muup) / 2
-                gnew, xnew, gpnew = gmu(matrix, newmu)
+                gnew, xnew, gpnew = gmu(matrix, xp_mat, newmu)
 
                 if gnew < k:
                     gup = gnew
@@ -206,8 +208,8 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
                 xp = xnew
                 gxpmu = gnew
         try:
-            xp_vec = xnew
-            # print(' xp_vec = xnew')
+            xp_mat = xnew
+            # print(' xp_mat = xnew')
         except:
             scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
             
@@ -217,23 +219,28 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
 
     alpha = torch.zeros([1, matrix.shape[1]], device = device)
     for i in range(r):
-        alpha[0, i] = torch.matmul(xp_vec[:, i], pos_matrix[:, i])
-        xp_vec[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_vec[:, i])
+        alpha[0, i] = torch.matmul(xp_mat[:, i], pos_matrix[:, i])
+        xp_mat[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_mat[:, i])
 
-    return xp_vec
+    return xp_mat
 
 def load_matrix_debug():
     with open("test_matrix.txt", "rb") as fpA:   #Pickling
         matrix  = pickle.load(fpA)
+        matrix = matrix.detach() 
+        matrix = matrix.to(device)
     return matrix
 
 ## ********************************************************************************** ##
 
 # matrix = load_matrix_debug()
 # start_time = time.time()
-# itr = 0
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
 # X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
 # print("--- %s seconds ---" % (time.time() - start_time))
+
 
 # r = 100
 # n = 10000
@@ -256,9 +263,9 @@ def load_matrix_debug():
 
 # print("The Sparsity of input set of vectors: " + str(sp))
 
-# xp_vec = groupedsparseproj(x, 0.8)
+# xp_mat = groupedsparseproj(x, 0.8)
 
-# spNew = sparsity(xp_vec)
+# spNew = sparsity(xp_mat)
 
 # print("The Output Sparsity: " + str(spNew))
 
