@@ -33,7 +33,7 @@ if not os.path.exists(filepath):
     os.mkdir(filepath)
 
 # --------------------------- Logging ------------------------------------------
-logging.basicConfig(filename = filepath + 'log_file_test.log', level=logging.DEBUG)
+logging.basicConfig(filename = filepath + 'log_file_test2.log', level=logging.DEBUG)
 
 # ---------------------- Device configuration ---------------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -43,9 +43,9 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 sps = 0.9
 
 ## Select which GSP Function to use:
-# gs_projection = gsp_reg.groupedsparseproj
+gs_projection = gsp_reg.groupedsparseproj
 #---------------------------------------------------------------------------
-gs_projection = gsp_vec.groupedsparseproj
+# gs_projection = gsp_vec.groupedsparseproj
 
 def gsp(model, itr, trial_list, sps = 0.9):
     w1 = model.fc1.weight.detach()
@@ -88,7 +88,7 @@ hidden_size1 = 300
 hidden_size2 = 100
 num_classes = 10
 
-num_epochs = 100
+num_epochs = 1
 gsp_interval = 10
 
 batch_size = 100

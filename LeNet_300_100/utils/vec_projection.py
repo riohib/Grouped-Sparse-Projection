@@ -72,47 +72,43 @@ def gmu(matrix, xp_mat, mu=0):
 
     col_norm_mask = (mnorm > 0)
 
-<< << << < HEAD
-# mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
-mat_mask = (col_norm_mask.float().view(1, matrix.shape[1]) * torch.ones(matrix.shape[0], 1))
-== == == =
-mat_mask = (col_norm_mask.float().view(1, 784) * torch.ones(300, 1))
->> >> >> > a8c53a2e92877625291150c958f202fdc127b97d
+    # mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
+    mat_mask = (col_norm_mask.float().view(1, matrix.shape[1]) * torch.ones(matrix.shape[0], 1))
 
-nip = torch.sum(xp_mat > 0, dim=0)  # columnwise number of values > 0
+    nip = torch.sum(xp_mat > 0, dim=0)  # columnwise number of values > 0
 
-# needs the if condition mnorm> 0 (it's included)
-# Terms in the Gradient Calculation
-term2 = torch.pow(torch.sum(xp_mat, dim=0), 2)
-mnorm_inv = torch.pow(mnorm_inf, -1)
-mnorm_inv3 = torch.pow(mnorm_inf, -3)
+    # needs the if condition mnorm> 0 (it's included)
+    # Terms in the Gradient Calculation
+    term2 = torch.pow(torch.sum(xp_mat, dim=0), 2)
+    mnorm_inv = torch.pow(mnorm_inf, -1)
+    mnorm_inv3 = torch.pow(mnorm_inf, -3)
 
-# The column vectors with norm mnorm == 0 zero, should not contribute to the gradient sum.
-# In the published algorithm, we only calculate gradients for condition: mnorm> 0
-# To vectorize, we include in the matrix columns where mnorm == 0, but we manually replace
-# the inf after divide by zero with 0, so that the grad of that column becomes 0 and
-# doesn't contribute to the sum.
-# mnorm_inv[torch.isinf(mnorm_inv)] = 0
-# mnorm_inv3[torch.isinf(mnorm_inv3)] = 0
+    # The column vectors with norm mnorm == 0 zero, should not contribute to the gradient sum.
+    # In the published algorithm, we only calculate gradients for condition: mnorm> 0
+    # To vectorize, we include in the matrix columns where mnorm == 0, but we manually replace
+    # the inf after divide by zero with 0, so that the grad of that column becomes 0 and
+    # doesn't contribute to the sum.
+    # mnorm_inv[torch.isinf(mnorm_inv)] = 0
+    # mnorm_inv3[torch.isinf(mnorm_inv3)] = 0
 
-# Calculate Gradient
-gradg_mat = torch.pow(betai, 2) * (-nip * mnorm_inv + term2 * mnorm_inv3)
-gradg = torch.sum(gradg_mat)
+    # Calculate Gradient
+    gradg_mat = torch.pow(betai, 2) * (-nip * mnorm_inv + term2 * mnorm_inv3)
+    gradg = torch.sum(gradg_mat)
 
-# vgmu calculation
-## When indtp is not empty (the columns whose norm are not zero)
-# xp_mat /= mnorm
-xp_mat[:, col_norm_mask] /= mnorm[col_norm_mask]
+    # vgmu calculation
+    ## When indtp is not empty (the columns whose norm are not zero)
+    # xp_mat /= mnorm
+    xp_mat[:, col_norm_mask] /= mnorm[col_norm_mask]
 
-## When indtp IS empty (the columns whose norm ARE zero)
-max_elem_rows = torch.argmax(matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
-xp_mat[max_elem_rows, ~col_norm_mask] = 1
+    ## When indtp IS empty (the columns whose norm ARE zero)
+    max_elem_rows = torch.argmax(matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
+    xp_mat[max_elem_rows, ~col_norm_mask] = 1
 
-# vgmu computation
-vgmu_mat = betai * torch.sum(xp_mat, dim=0)
-vgmu = torch.sum(vgmu_mat)
+    # vgmu computation
+    vgmu_mat = betai * torch.sum(xp_mat, dim=0)
+    vgmu = torch.sum(vgmu_mat)
 
-return vgmu, xp_mat, gradg
+    return vgmu, xp_mat, gradg
 
 
 def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):

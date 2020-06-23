@@ -219,13 +219,13 @@ def load_matrix_debug():
 
 
 # ## ********************************************************************************** ##
-matrix = load_matrix_debug()
-start_time = time.time()
-sps = 0.9
-precision = 1e-6
-linrat = 0.9
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# matrix = load_matrix_debug()
+# start_time = time.time()
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 # r = 100
 # n = 10000
