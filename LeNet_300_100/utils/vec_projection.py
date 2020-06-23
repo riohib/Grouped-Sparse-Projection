@@ -72,8 +72,12 @@ def gmu(matrix, xp_mat, mu = 0):
     mnorm_inf[mnorm_inf==0] = float("Inf")
 
     col_norm_mask =  (mnorm > 0)
+<<<<<<< HEAD
     # mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
     mat_mask =  (col_norm_mask.float().view(1,matrix.shape[1]) * torch.ones(matrix.shape[0],1))
+=======
+    mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
+>>>>>>> a8c53a2e92877625291150c958f202fdc127b97d
      
     nip = torch.sum(xp_mat > 0, dim=0) #columnwise number of values > 0
 

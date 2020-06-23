@@ -217,6 +217,7 @@ def load_matrix_debug():
         matrix = pickle.load(fpA)
     return matrix
 
+<<<<<<< HEAD
 
 # ## ********************************************************************************** ##
 matrix = load_matrix_debug()
@@ -227,6 +228,18 @@ linrat = 0.9
 X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
 print("--- %s seconds ---" % (time.time() - start_time))
 
+=======
+
+# ## ********************************************************************************** ##
+# matrix = load_matrix_debug()
+# start_time = time.time()
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
+
+>>>>>>> a8c53a2e92877625291150c958f202fdc127b97d
 # r = 100
 # n = 10000
 # k = 0
