@@ -13,12 +13,13 @@ from utils.helper import *
 
 import utils.vec_projection as gsp_vec
 import utils.torch_projection as gsp_reg
+import utils.gpu_projection as gsp_gpu
 
 from net.models import LeNet
 
 
 ## New Post Conf
-filepath = './results/E3_VecGsp90_e100_test/'
+filepath = './results/E5_VGsp90_e100_gpuPost/'
 
 #******************** Result Directories **************************
 if not os.path.exists('./Loss'):
@@ -33,7 +34,7 @@ if not os.path.exists(filepath):
     os.mkdir(filepath)
 
 # --------------------------- Logging ------------------------------------------
-logging.basicConfig(filename = filepath + 'log_file_test2.log', level=logging.DEBUG)
+logging.basicConfig(filename = filepath + 'log_file_gpu1.log', level=logging.DEBUG)
 
 # ---------------------- Device configuration ---------------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -43,9 +44,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 sps = 0.9
 
 ## Select which GSP Function to use:
-gs_projection = gsp_reg.groupedsparseproj
-#---------------------------------------------------------------------------
+# gs_projection = gsp_reg.groupedsparseproj
 # gs_projection = gsp_vec.groupedsparseproj
+gs_projection = gsp_gpu.groupedsparseproj
+
+#---------------------------------------------------------------------------
 
 def gsp(model, itr, trial_list, sps = 0.9):
     w1 = model.fc1.weight.detach()
@@ -53,10 +56,13 @@ def gsp(model, itr, trial_list, sps = 0.9):
     w3 = model.fc3.weight.detach()
 
     # print(itr)
-    # if (itr == 40):
-    #     scipy.io.savemat('w1.mat', mdict={'w1': w1})
-    #     scipy.io.savemat('w2.mat', mdict={'w2': w2})
-    #     scipy.io.savemat('w3.mat', mdict={'w3': w3})
+    # if (itr == 20):
+    #     # scipy.io.savemat('w11.mat', mdict={'w1': w1})
+    #     # scipy.io.savemat('w22.mat', mdict={'w2': w2})
+    #     # scipy.io.savemat('w33.mat', mdict={'w3': w3})
+    #     torch.save( w1, 'w1.pt')
+    #     torch.save( w2, 'w2.pt')
+    #     torch.save( w3, 'w3.pt')
 
     sparse_w1 = gs_projection(w1, sps)
     sparse_w2 = gs_projection(w2, sps)
@@ -67,10 +73,10 @@ def gsp(model, itr, trial_list, sps = 0.9):
     model.fc3.weight.data = sparse_w3.clone().requires_grad_(True)
 
     
-    if itr < 600:
-        trial_list.append(sparse_w1.sum().item())
-        trial_list.append(sparse_w2.sum().item())
-        trial_list.append(sparse_w3.sum().item())
+    # if itr < 600:
+    #     trial_list.append(sparse_w1.sum().item())
+    #     trial_list.append(sparse_w2.sum().item())
+    #     trial_list.append(sparse_w3.sum().item())
 
     if itr % 10 == 0:
         logging.debug(" ------------------- itr No: %s ------------------ \n" % itr)
@@ -88,7 +94,7 @@ hidden_size1 = 300
 hidden_size2 = 100
 num_classes = 10
 
-num_epochs = 1
+num_epochs = 100
 gsp_interval = 10
 
 batch_size = 100
@@ -219,7 +225,7 @@ if __name__ == '__main__':
     model, trial_list = train(num_epochs)
     print("--- %s seconds ---" % (time.time() - start_time))
 
-torch.save(model.state_dict(), filepath + './ln_GspVec_Post' + str(sps) + '_ep' \
+torch.save(model.state_dict(), filepath + './ln_GspVec_Post_gpu' + str(sps) + '_ep' \
                             + str(num_epochs) + '_i' + str(gsp_interval) +'.pth')
 test(model)
 

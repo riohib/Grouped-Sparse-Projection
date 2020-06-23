@@ -73,7 +73,7 @@ def gmu(matrix, xp_mat, mu=0):
     col_norm_mask = (mnorm > 0)
 
     # mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
-    mat_mask = (col_norm_mask.float().view(1, matrix.shape[1]) * torch.ones(matrix.shape[0], 1))
+    mat_mask = (col_norm_mask.float().view(1, matrix.shape[1]) * torch.ones(matrix.shape[0], 1,device=device))
 
     nip = torch.sum(xp_mat > 0, dim=0)  # columnwise number of values > 0
 
@@ -218,10 +218,14 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
 
     # pdb.set_trace()
 
-    alpha = torch.zeros([1, matrix.shape[1]], device=device)
-    for i in range(r):
-        alpha[0, i] = torch.matmul(xp_mat[:, i], pos_matrix[:, i])
-        xp_mat[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_mat[:, i])
+    # alpha = torch.zeros([1, matrix.shape[1]], device=device)
+    # for i in range(r):
+    #     alpha[0, i] = torch.matmul(xp_mat[:, i], pos_matrix[:, i])
+    #     xp_mat[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_mat[:, i])
+    
+    alpha_mat = torch.matmul(xp_mat.T, pos_matrix)
+    alpha = torch.diagonal(alpha_mat)
+    xp_mat = alpha * (matrix_sign * xp_mat)
 
     return xp_mat
 
@@ -237,6 +241,7 @@ def load_matrix_debug():
 
 # matrix = load_matrix_debug()
 # matrix = torch.load("w1.pt")
+# matrix = matrix.to(device)
 # start_time = time.time()
 # sps = 0.9
 # precision = 1e-6

@@ -9,6 +9,7 @@
 *.err
 *.md
 *.sh
+*.pt
 
 models.py
 prune.py

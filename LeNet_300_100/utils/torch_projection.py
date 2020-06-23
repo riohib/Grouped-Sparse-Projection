@@ -212,8 +212,8 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
     return xp_vec
 
 
-def load_matrix_debug():
-    with open("test_matrix.txt", "rb") as fpA:  # Pickling
+def load_matrix_debug(test_matrix):
+    with open(test_matrix, "rb") as fpA:  # Pickling
         matrix = pickle.load(fpA)
     return matrix
 
