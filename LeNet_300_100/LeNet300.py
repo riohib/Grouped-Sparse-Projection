@@ -4,6 +4,7 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 import time
+import scipy.io
 
 from matplotlib import pyplot as plt
 import logging
@@ -17,7 +18,7 @@ from net.models import LeNet
 
 
 ## New Post Conf
-filepath = './results/E3__vgsp90_e50/'
+filepath = './results/E3_VecGsp90_e100_test/'
 
 #******************** Result Directories **************************
 if not os.path.exists('./Loss'):
@@ -32,7 +33,7 @@ if not os.path.exists(filepath):
     os.mkdir(filepath)
 
 # --------------------------- Logging ------------------------------------------
-logging.basicConfig(filename = filepath + 'log_file.log', level=logging.DEBUG)
+logging.basicConfig(filename = filepath + 'log_file_test.log', level=logging.DEBUG)
 
 # ---------------------- Device configuration ---------------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,19 +43,24 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 sps = 0.9
 
 ## Select which GSP Function to use:
-gs_projection = gsp_reg.groupedsparseproj
+# gs_projection = gsp_reg.groupedsparseproj
+#---------------------------------------------------------------------------
+gs_projection = gsp_vec.groupedsparseproj
 
 def gsp(model, itr, trial_list, sps = 0.9):
     w1 = model.fc1.weight.detach()
     w2 = model.fc2.weight.detach()
     w3 = model.fc3.weight.detach()
 
-    # if (itr == 48):
-    #     scipy.io.savemat('w1.mat', mdict={'arr': w1})
+    # print(itr)
+    # if (itr == 40):
+    #     scipy.io.savemat('w1.mat', mdict={'w1': w1})
+    #     scipy.io.savemat('w2.mat', mdict={'w2': w2})
+    #     scipy.io.savemat('w3.mat', mdict={'w3': w3})
 
-    sparse_w1 = gs_projection(w1, sps, itr)
-    sparse_w2 = gs_projection(w2, sps, itr)
-    sparse_w3 = gs_projection(w3, sps, itr)
+    sparse_w1 = gs_projection(w1, sps)
+    sparse_w2 = gs_projection(w2, sps)
+    sparse_w3 = gs_projection(w3, sps)
 
     model.fc1.weight.data = sparse_w1.clone().requires_grad_(True)
     model.fc2.weight.data = sparse_w2.clone().requires_grad_(True)
@@ -82,7 +88,7 @@ hidden_size1 = 300
 hidden_size2 = 100
 num_classes = 10
 
-epoch = 10
+num_epochs = 100
 gsp_interval = 10
 
 batch_size = 100
@@ -125,7 +131,7 @@ test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
 
 # model_us = Net().to(device)
 
-def train():
+def train(num_epochs):
     # Select Model Class
     model = LeNet(mask=False).to(device)
 
@@ -140,7 +146,6 @@ def train():
 
     # Prune Model
     # model_prune(model, threshold=2.0e-2)
-    num_epochs = 10
     # Train the model
     loss_array = []
     trial_list = []
@@ -156,9 +161,9 @@ def train():
             images = images.reshape(-1, 28*28).to(device)
             labels = labels.to(device)
 
-            if itr % gsp_interval == 0:
-                trial_list = gsp(model, trial_list, sps)
-                print("GSP-ing: itr:  " + str(itr))
+            # if itr % gsp_interval == 0:
+            #     trial_list = gsp(model, itr, trial_list, sps)
+            #     print("GSP-ing: itr:  " + str(itr))
 
             # Forward pass
             outputs = model(images)
@@ -168,9 +173,9 @@ def train():
             optimizer.zero_grad()
             loss.backward()
 
-            # if itr % gsp_interval == 0:
-            #     trial_list = gsp(model, itr, trial_list, sps)
-            #     print("GSP-ing: itr:  " + str(itr))
+            if itr % gsp_interval == 0:
+                trial_list = gsp(model, itr, trial_list, sps)
+                print("GSP-ing: itr:  " + str(itr))
 
             # Fix Zeros Mask
             # fix_zeros(model)
@@ -183,7 +188,7 @@ def train():
                     .format(epoch+1, num_epochs, i+1, total_step, loss.item()))
             itr += 1
 
-# return model, trial_list
+    return model, trial_list
 
 # filepath = './gsp_models_trained/'
 # model.load_state_dict(torch.load(filepath + 'LeNet_PREgsp_98_T_0.005_e200_T_0.008.pth', map_location='cpu'))
@@ -211,11 +216,11 @@ def test(model):
 if __name__ == '__main__':
     
     start_time = time.time()
-    model, trial_list = train()
+    model, trial_list = train(num_epochs)
     print("--- %s seconds ---" % (time.time() - start_time))
 
-torch.save(model.state_dict(), filepath + './ln_gspReg_pre' + str(sps) + '_ep' \
-                            + str(epoch) + '_i' + str(gsp_interval) +'.pth')
+torch.save(model.state_dict(), filepath + './ln_GspVec_Post' + str(sps) + '_ep' \
+                            + str(num_epochs) + '_i' + str(gsp_interval) +'.pth')
 test(model)
 
 

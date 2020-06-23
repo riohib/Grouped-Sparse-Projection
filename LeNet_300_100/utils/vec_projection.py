@@ -72,7 +72,8 @@ def gmu(matrix, xp_mat, mu = 0):
     mnorm_inf[mnorm_inf==0] = float("Inf")
 
     col_norm_mask =  (mnorm > 0)
-    mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
+    # mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
+    mat_mask =  (col_norm_mask.float().view(1,matrix.shape[1]) * torch.ones(matrix.shape[0],1))
      
     nip = torch.sum(xp_mat > 0, dim=0) #columnwise number of values > 0
 
@@ -160,7 +161,8 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
         gpnew = gradg         # g'(0)
         delta = muup - mulow
         switch  = True 
-
+        
+        # pdb.set_trace()
         while abs(gnew - k) > precision * r and numiter < 100:
             oldmu = newmu
             # % Secant method: 
@@ -233,13 +235,13 @@ def load_matrix_debug():
 
 ## ********************************************************************************** ##
 
-matrix = load_matrix_debug()
-start_time = time.time()
-sps = 0.9
-precision = 1e-6
-linrat = 0.9
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# matrix = load_matrix_debug()
+# start_time = time.time()
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 
 # r = 100
