@@ -18,14 +18,29 @@ import utils.gpu_projection as gsp_gpu
 from net.models import LeNet
 
 
-## New Post Conf
-filepath = './results/E5_VGsp90_e100_gpuPost/'
+## ===================== Hyper Parameters =========================
+sps = 0.99
+num_epochs = 150
+gsp_interval = 20
+pre_gsp = True
 
+num_classes = 10
+batch_size = 100
+learning_rate = 0.001
+
+
+##------------------- New Post Conf -------------------
+if pre_gsp:
+    savefilename = 'ln_pre'
+else:
+    savefilename = 'ln_post'
+
+filepath = './results/E7_' +str(sps) + '_e' +str(num_epochs) +str(gsp_interval)+'/'
 #******************** Result Directories **************************
-if not os.path.exists('./Loss'):
-    os.mkdir('./Loss')
-if not os.path.exists('./weights_plot'):
-    os.mkdir('./weights_plot')
+# if not os.path.exists('./Loss'):
+#     os.mkdir('./Loss')
+# if not os.path.exists('./weights_plot'):
+#     os.mkdir('./weights_plot')
 
 if not os.path.exists('./results'):
     os.mkdir('./results')
@@ -34,23 +49,24 @@ if not os.path.exists(filepath):
     os.mkdir(filepath)
 
 # --------------------------- Logging ------------------------------------------
-logging.basicConfig(filename = filepath + 'log_file_gpu1.log', level=logging.DEBUG)
+logpath = filepath + 'log_fileNew.log'
+logging.basicConfig(filename = logpath , level=logging.DEBUG)
 
 # ---------------------- Device configuration ---------------------------
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # ========================== GSP FUNCTION ==================================
-sps = 0.9
+
 
 ## Select which GSP Function to use:
 # gs_projection = gsp_reg.groupedsparseproj
-# gs_projection = gsp_vec.groupedsparseproj
-gs_projection = gsp_gpu.groupedsparseproj
+gs_projection = gsp_vec.groupedsparseproj
+# gs_projection = gsp_gpu.groupedsparseproj
 
 #---------------------------------------------------------------------------
 
-def gsp(model, itr, trial_list, sps = 0.9):
+def gsp(model, itr, trial_list, sps):
     w1 = model.fc1.weight.detach()
     w2 = model.fc2.weight.detach()
     w3 = model.fc3.weight.detach()
@@ -66,7 +82,7 @@ def gsp(model, itr, trial_list, sps = 0.9):
 
     sparse_w1 = gs_projection(w1, sps)
     sparse_w2 = gs_projection(w2, sps)
-    sparse_w3 = gs_projection(w3, sps)
+    sparse_w3 = gs_projection(w3, 0.995)
 
     model.fc1.weight.data = sparse_w1.clone().requires_grad_(True)
     model.fc2.weight.data = sparse_w2.clone().requires_grad_(True)
@@ -84,21 +100,18 @@ def gsp(model, itr, trial_list, sps = 0.9):
                         (gsp_vec.sparsity(w1), gsp_vec.sparsity(model.fc1.weight.detach())))
         logging.debug("Layer 2 Sparsity w2 | before: %.2f | After: %.2f \n" % 
                         (gsp_vec.sparsity(w2), gsp_vec.sparsity(model.fc2.weight.detach())))
+        logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
+                        (gsp_vec.sparsity(w3), gsp_vec.sparsity(model.fc3.weight.detach())))
     return trial_list
 # ========================== GSP FUNCTION ==================================
 
 
 # Hyper-parameters 
-input_size = 784
-hidden_size1 = 300
-hidden_size2 = 100
-num_classes = 10
+# input_size = 784
+# hidden_size1 = 300
+# hidden_size2 = 100
 
-num_epochs = 100
-gsp_interval = 10
 
-batch_size = 100
-learning_rate = 0.001
 
 # MNIST dataset 
 train_dataset = torchvision.datasets.MNIST(root='../../data', 
@@ -144,6 +157,10 @@ def train(num_epochs):
     ## Load Pretrained Model
     model_filepath = './PreTrained/'
     model.load_state_dict(torch.load(model_filepath + 'LeNet300_pt.pth', map_location=device))
+    
+
+    # model_filepath = './results/E11_VG988_e200_pre_I100/'
+    # model.load_state_dict(torch.load(model_filepath + 'ln_GspVec_Pre0.98_ep30_i100.pth', map_location=device))
 
     # Loss and optimizer
     critrion = nn.CrossEntropyLoss()
@@ -155,7 +172,6 @@ def train(num_epochs):
     # Train the model
     loss_array = []
     trial_list = []
-    gsp_interval = 20
     in_sparse = 0
     itr = 0
     total_step = len(train_loader)
@@ -167,9 +183,9 @@ def train(num_epochs):
             images = images.reshape(-1, 28*28).to(device)
             labels = labels.to(device)
 
-            # if itr % gsp_interval == 0:
-            #     trial_list = gsp(model, itr, trial_list, sps)
-            #     print("GSP-ing: itr:  " + str(itr))
+            if pre_gsp and (itr % gsp_interval == 0):
+                trial_list = gsp(model, itr, trial_list, sps)
+                print("GSP-Pre-ing: itr:  " + str(itr))
 
             # Forward pass
             outputs = model(images)
@@ -179,9 +195,9 @@ def train(num_epochs):
             optimizer.zero_grad()
             loss.backward()
 
-            if itr % gsp_interval == 0:
+            if (not pre_gsp) and (itr % gsp_interval == 0):
                 trial_list = gsp(model, itr, trial_list, sps)
-                print("GSP-ing: itr:  " + str(itr))
+                print("GSP-Post-ing: itr:  " + str(itr))
 
             # Fix Zeros Mask
             # fix_zeros(model)
@@ -225,7 +241,7 @@ if __name__ == '__main__':
     model, trial_list = train(num_epochs)
     print("--- %s seconds ---" % (time.time() - start_time))
 
-torch.save(model.state_dict(), filepath + './ln_GspVec_Post_gpu' + str(sps) + '_ep' \
+torch.save(model.state_dict(), filepath + savefilename + str(sps) + '_ep' \
                             + str(num_epochs) + '_i' + str(gsp_interval) +'.pth')
 test(model)
 

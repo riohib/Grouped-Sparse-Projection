@@ -1,4 +1,12 @@
-/LeNet_300_100/__pycache__
+CNN_LeNet_5/__pycache__
+CNN_LeNet_5/data
+
+/MLP_LeNet_300/__pycache__
+/MLP_LeNet_300/archived
+/MLP_LeNet_300/data
+/MLP_LeNet_300/gsp_models_trained
+
+
 
 *.log
 *.pth
@@ -10,6 +18,7 @@
 *.md
 *.sh
 *.pt
+*.gz
 
 models.py
 prune.py
