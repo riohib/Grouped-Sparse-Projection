@@ -57,8 +57,12 @@ parser.add_argument('--log', type=str, default='log.txt',
                     help='log file name')
 parser.add_argument('--gsp', type=str, default='pre',
                     help='gsp pre or post update')
-parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                    help='use pre-trained model')
+parser.add_argument('--sps', type=float, default=0.95, metavar='SPS',
+                    help='gsp sparsity value (default: 0.95)')  
+parser.add_argument('--device', type=str, default='cpu',
+                    help='cpu or gpu gsp version')                                      
+parser.add_argument('--pretrained', type=str, default='./saves/elt_0.0_0',
+                    help='the path to the pretrained model')                    
 args = parser.parse_args()
 
 # Control Seed
@@ -89,10 +93,14 @@ test_loader = torch.utils.data.DataLoader(
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 ## Select which GSP Function to use:
 # gs_projection = gsp_reg.groupedsparseproj
-gs_projection = gsp_vec.groupedsparseproj
-# gs_projection = gsp_gpu.groupedsparseproj
 
-gsp_interval = 20; sps=0.97
+if args.device == 'gpu':
+    gs_projection = gsp_gpu.groupedsparseproj
+    print("gpu")
+else:
+    gs_projection = gsp_vec.groupedsparseproj
+
+gsp_interval = 20; sps= args.sps
 
 def gsp(model, itr, sps):
     w1 = model.fc1.weight.detach()
@@ -196,8 +204,8 @@ def test():
 
 if args.pretrained:
     # model.load_state_dict(torch.load('saves/F95_2_elt_0.0_0_'+ str(args.gsp)+'.pth'))
-    model.load_state_dict(torch.load('saves/F97_1_elt_0.0_0_'+ str(args.gsp)+'.pth'))
-    # model.load_state_dict(torch.load('saves/elt_0.0_0.pth'))
+    # model.load_state_dict(torch.load('saves/F97_1_elt_0.0_0_'+ str(args.gsp)+'.pth'))
+    model.load_state_dict(torch.load(args.pretrained + '.pth'))
     accuracy = test()
 
 # Initial training
@@ -205,7 +213,7 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/F97_1_elt_'+str(args.decay)+'_'+str(args.reg_type)+'_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/F97_2_elt_'+str(args.decay)+'_'+str(args.reg_type)+'_'+str(args.gsp)+'.pth')
+torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'_0_'+str(args.gsp)+'.pth')
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

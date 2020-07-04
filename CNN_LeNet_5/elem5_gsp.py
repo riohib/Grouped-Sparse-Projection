@@ -53,8 +53,12 @@ parser.add_argument('--log', type=str, default='log.txt',
                     help='log file name')
 parser.add_argument('--gsp', type=str, default='pre',
                     help='gsp pre or post update')
-parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                    help='use pre-trained model')
+parser.add_argument('--sps', type=float, default=0.95, metavar='SPS',
+                    help='gsp sparsity value (default: 0.95)')  
+parser.add_argument('--device', type=str, default='cpu',
+                    help='cpu or gpu gsp version')     
+parser.add_argument('--pretrained', type=str, default='./saves/elt_0.0_0',
+                    help='the path to the pretrained model')
 args = parser.parse_args()
 
 # Control Seed
@@ -88,7 +92,7 @@ logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 gs_projection = gsp_vec.groupedsparseproj
 # gs_projection = gsp_gpu.groupedsparseproj
 
-gsp_interval = 20; sps=0.95
+gsp_interval = 20; sps=args.sps
 
 def gsp(model, itr, sps):
 
@@ -103,8 +107,8 @@ def gsp(model, itr, sps):
     reshaped_w4 = w4
 
     sparse_w1 = gs_projection(reshaped_w1, sps)
-    sparse_w2 = gs_projection(reshaped_w2, 0.99)
-    sparse_w3 = gs_projection(reshaped_w3, 0.99)
+    sparse_w2 = gs_projection(reshaped_w2, sps)
+    sparse_w3 = gs_projection(reshaped_w3, sps)
     sparse_w4 = gs_projection(reshaped_w4, sps)
     
     model.conv1.weight.data = sparse_w1.clone().requires_grad_(True).view(20,1,5,5)
@@ -158,13 +162,13 @@ def train(epochs, decay=0, threshold=0.0):
                 reg = 0.0
                 for param in model.parameters():
                     if param.requires_grad and torch.sum(torch.abs(param))>0:
-                        if args.reg_type==1:    
+                        if args.reg==1:    
                             reg += torch.sum(torch.abs(param))
-                        elif args.reg_type==2:
+                        elif args.reg==2:
                             reg += torch.sum(torch.abs(param))/torch.sqrt(torch.sum(param**2))
-                        elif args.reg_type==3:
+                        elif args.reg==3:
                             reg += (torch.sum(torch.abs(param))**2)/torch.sum(param**2)
-                        elif args.reg_type==4:    
+                        elif args.reg==4:    
                             reg += torch.sum(2*torch.abs(param)/(1+torch.abs(param)))
                         else:
                             reg = 0.0         
@@ -203,16 +207,17 @@ def test():
     return accuracy
 
 if args.pretrained:
-    model.load_state_dict(torch.load('saves/elt_0.0_0.pth'))
+    # model.load_state_dict(torch.load('saves/elt_0.0_0.pth'))
     # model.load_state_dict(torch.load('saves/F96_elt_0.0_0_'+str(args.gsp)+'.pth'))
     # model.load_state_dict(torch.load('saves/gsp_elt_0.0_0_'+str(args.gsp)+'.pth'))
+    model.load_state_dict(torch.load(args.pretrained + '.pth'))
     accuracy = test()
 
 # Initial training
 print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
-torch.save(model.state_dict(), 'saves/Asym99.95_elt_'+str(args.decay)+'_'+str(args.reg)+'_'+str(args.gsp)+'.pth')
+torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'_0_'+str(args.gsp)+'.pth')
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)
