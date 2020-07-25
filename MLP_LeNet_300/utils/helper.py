@@ -22,13 +22,19 @@ import utils.vec_projection as gsp_vec
 np.random.seed(0)
 torch.manual_seed(0)
 
+#***********************************************************
+import sys
+import torch
+from torch.autograd import Variable
+import threading
+import queue
+
 #************************* Imports *************************
 
 logging.basicConfig(filename='LogFile.log', level=logging.DEBUG)
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-list = []
 nan_list = []
 nan_iter = []
 
@@ -136,3 +142,63 @@ def fix_zeros(model):
         grad_tensor = pDict[k].grad.data.cpu().numpy()
         grad_tensor = np.where(tensor==0, 0, grad_tensor)
         pDict[k].grad.data = torch.from_numpy(grad_tensor).to(device)
+
+
+#*****************************************************************************
+
+def prefetch_map(func, input_iter, prefetch=1, check_interval=5):
+    """
+    Map a function (func) on a iterable (input_iter), but
+    prefetch input values and map them asyncronously as output
+    values are consumed.
+    prefetch: int, the number of values to prefetch asyncronously
+    check_interval: int, the number of seconds to block when waiting
+                    for output values.
+    """
+    result_q = queue.Queue(prefetch)
+    error_q = queue.Queue(1)
+    done_event = threading.Event()
+    mapper_thread = threading.Thread(
+        target=_mapper_loop, args=(
+            func, input_iter, result_q, error_q, done_event)
+    )
+    mapper_thread.daemon = True
+    mapper_thread.start()
+    while not (done_event.is_set() and result_q.empty()):
+        try:
+            result = result_q.get(timeout=check_interval)
+        except queue.Empty:
+            continue
+        yield result
+    if error_q.full():
+        raise error_q.get()[1]
+
+
+def _mapper_loop(func, input_iter, result_q, error_q, done_event):
+    try:
+        for x in input_iter:
+            result = func(x)
+            result_q.put(result)
+    except BaseException:
+        error_q.put(sys.exc_info())
+    finally:
+        done_event.set()
+
+import pdb
+def to_variable_on_gpu(batch):
+    # pdb.set_trace()
+    inputs = [Variable(v.cuda(non_blocking=True)) for v in batch[0]]
+    inputs = torch.stack(inputs)
+
+    targets = (Variable(batch[1].cuda(non_blocking=True)))
+    # targets = torch.stack(targets)
+
+    return inputs, targets
+
+
+def prefetch_dataloader(dataloader, num_prefetch):
+    if torch.cuda.is_available():
+        dataloader = prefetch_map(
+            to_variable_on_gpu, dataloader, prefetch=num_prefetch
+        )
+    return dataloader

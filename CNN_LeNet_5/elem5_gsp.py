@@ -25,6 +25,10 @@ import utils.vec_projection as gsp_vec
 import utils.torch_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
 
+from math import gcd
+from functools import reduce
+from operator import mul
+
 os.makedirs('saves', exist_ok=True)
 
 # Training settings
@@ -94,6 +98,48 @@ gs_projection = gsp_vec.groupedsparseproj
 
 gsp_interval = 20; sps=args.sps
 
+#==============================================================================================
+def global_gsp(model, sps):
+    params_d = {}
+    weight_d = {}
+    for name, param in model.named_parameters(): 
+        params_d[name] = param.detach()
+        if 'weight' in name:
+            weight_d[name] = param.detach()
+    
+    # Calculate the row_size of the input matrix for GSP. Using the GCD of the product 
+    # of the tensor dimensions as the row_size and set the required column size for each
+    # layer weight matrix.
+    shape_list = [reduce(mul, list(y.shape)) for x, y in weight_d.items()]   
+    gcd_dim = reduce(gcd, shape_list)
+    #------------------------------------------------------------------------
+
+    global_w_tup = ()
+    second_dim = []
+
+    for k, v in weight_d.items():
+        reshaped = v.view(gcd_dim, -1)
+        second_dim.append(reshaped.shape[1])  # store second dim for putting back tensor into model.
+        global_w_tup = global_w_tup + (reshaped,) #creating new tuple, as torch.cat takes tuple.
+
+    global_weights = torch.cat(global_w_tup, dim=1)
+
+    sparse_g_weights = gs_projection(global_weights, sps)
+
+    i = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            
+            if i == 0:
+                start = 0
+                end = second_dim[i]
+            else:
+                start = second_dim[i-1]
+                end = second_dim[i-1] + second_dim[i]
+            param.data = sparse_g_weights[:, start:end].clone().requires_grad_(True).view(param.shape)
+            i += 1
+
+
 def gsp(model, itr, sps):
 
     w1 = model.conv1.weight.detach()
@@ -106,10 +152,10 @@ def gsp(model, itr, sps):
     reshaped_w3 = w3
     reshaped_w4 = w4
 
-    sparse_w1 = gs_projection(reshaped_w1, sps)
-    sparse_w2 = gs_projection(reshaped_w2, sps)
-    sparse_w3 = gs_projection(reshaped_w3, sps)
-    sparse_w4 = gs_projection(reshaped_w4, sps)
+    sparse_w1 = gs_projection(reshaped_w1, 0.91)
+    sparse_w2 = gs_projection(reshaped_w2, 0.85)
+    sparse_w3 = gs_projection(reshaped_w3, 0.72)
+    sparse_w4 = gs_projection(reshaped_w4, 0.33)
     
     model.conv1.weight.data = sparse_w1.clone().requires_grad_(True).view(20,1,5,5)
     model.conv2.weight.data = sparse_w2.clone().requires_grad_(True).view(50,20,5,5)
@@ -143,16 +189,18 @@ def train(epochs, decay=0, threshold=0.0):
     itr=0
     model.train()
     pbar = tqdm(range(epochs), total=epochs)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=75, gamma=0.1)
     curves = np.zeros((epochs,14))
     
     for epoch in pbar:
+        print(f" learning rate: {optimizer.param_groups[0]['lr']}")
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
 
             if (itr % gsp_interval == 0) and args.gsp == 'pre':
                 gsp(model, itr, sps)
-                print("GSP-Pre-ing: itr:  " + str(itr))
+                # print("GSP-Pre-ing: itr:  " + str(itr))
 
             output = model(data)
             loss = F.nll_loss(output, target)
@@ -180,7 +228,7 @@ def train(epochs, decay=0, threshold=0.0):
 
             if (itr % gsp_interval == 0) and args.gsp == 'post':
                 gsp(model, itr, sps)
-                print("GSP-Post-ing: itr:  " + str(itr))
+                # print("GSP-Post-ing: itr:  " + str(itr))
 
             
             if batch_idx % args.log_interval == 0:
@@ -188,6 +236,9 @@ def train(epochs, decay=0, threshold=0.0):
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f'Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  Reg: {reg:.3f}')
             itr+=1
+        scheduler.step()
+
+
 
 def test():
     model.eval()
@@ -217,7 +268,8 @@ if args.pretrained:
 print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
-torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
+# torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
+torch.save(model.state_dict(), 'saves/VariableSps.pth') 
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

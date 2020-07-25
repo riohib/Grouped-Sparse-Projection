@@ -32,7 +32,7 @@ def sparsity(matrix):
 def checkCritical(matrix, critval_list, precision=1e-6):
     max_elems = torch.max(matrix, 0)[0]
 
-    ind_crit_bool = (abs(matrix - max_elems) < precision)
+    ind_crit_bool = (torch.abs(matrix - max_elems) < precision)
     crit_points = matrix * ind_crit_bool
 
     num_crit_points = torch.sum(ind_crit_bool, dim=0)

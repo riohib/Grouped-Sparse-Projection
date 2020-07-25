@@ -213,6 +213,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
             # print(' xp_mat = xnew')
         except:
             scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
+            # pass
 
         gxpmu = gnew
 
