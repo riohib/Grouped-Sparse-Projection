@@ -19,7 +19,7 @@ def sparsity(matrix):
         if matrix[:, i].sum() == 0:
             spx = 1
             spxList.append(spx)
-            print('here')
+            # print('here')
         else:
             ni = matrix.shape[0]
             spx = (np.sqrt(ni) - torch.norm(matrix[:, i], 1) / torch.norm(matrix[:, i], 2)) / (np.sqrt(ni) - 1)
