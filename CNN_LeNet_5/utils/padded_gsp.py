@@ -49,65 +49,48 @@ def checkCritical(pos_matrix, precision=1e-6):
     return critval_list, max_elems, critval_all_col
 
 
-def gmu(matrix, xp_vec, mu=0):
+def gmu(p_matrix, xp_mat, mu=0, *args):
     vgmu = 0
     gradg = 0
-    matrix = torch.abs(matrix)
+    ni_tlist = ni_tensor.int()
+    
+    p_matrix = torch.abs(p_matrix)
     glist = []
 
-    gsp_iter = 0
-    for i in range(matrix.shape[1]):
-        ni = matrix[:, i].shape[0]
-        betai = 1 / (torch.sqrt(torch.tensor(ni, dtype=torch.float32, device=device)) - 1)
+#----------------------------------------------------------------------------------------
+    # ni_tensor
+    betai = 1 / (torch.sqrt(ni_tensor) - 1)
 
-        xp_vec[:, i] = matrix[:, i] - (mu * betai)  # .to(device)
-        indtp = torch.where(xp_vec[:, i] > 0)[0]
+    xp_mat = p_matrix - (mu * betai)
+    indtp = xp_mat > 0
 
-        xp_vec[:, i] = torch.relu(xp_vec[:, i])
+    xp_mat.relu_()
 
-        # Save xp_vec:
-        gsp_iter += 1
 
-        # Outputs
-        f2 = torch.norm(xp_vec[:, i])
-        if f2 > 0:
-            nip = len(indtp)  # may be needs change here
-            ev = torch.ones((nip, 1), device=device)
+    # outputs
+    mnorm = torch.norm(xp_mat, dim=0)
+    mnorm_inf = mnorm.clone()
+    mnorm_inf[mnorm_inf == 0] = float("Inf")
+    col_norm_mask = (mnorm > 0)
 
-            term2 = torch.pow(torch.matmul(ev.T, xp_vec[indtp, i]), 2)
-            # new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
-            # gradg = gradg + new_grad
-            # glist.append(new_grad.item())
-            new_grad = torch.pow(betai, 2) * (-nip * torch.pow(f2, -1) + term2 * torch.pow(f2, -3))
-            gradg = gradg + new_grad
 
-            glist.append(new_grad.item())
+    # vgmu calculation
+    ## When indtp is not empty (the columns whose norm are not zero)
+    # xp_mat /= mnorm
+    xp_mat[:, col_norm_mask] /= mnorm[col_norm_mask]
 
-        if indtp.numel() != 0:
-            vec_norm = torch.norm(xp_vec[:, i])
+    ## When indtp IS empty (the columns whose norm ARE zero)
+    max_elem_rows = torch.argmax(matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
+    xp_mat[max_elem_rows, ~col_norm_mask] = 1
 
-            if vec_norm == 0:
-                scipy.io.savemat('norm_zero.mat', mdict={'arr': xp_vec})
+    # vgmu computation
+    vgmu_mat = betai * torch.sum(xp_mat, dim=0)
+    vgmu = torch.sum(vgmu_mat)
 
-            xp_vec[:, i] = xp_vec[:, i] / vec_norm
-            vgmu = vgmu + betai * torch.sum(xp_vec[:, i])
-            # glist.append((betai * torch.sum(xp_vec[:, i])).item() )
-
-        else:
-            im = torch.argmax(matrix[:, i])
-            xp_vec[im, i] = 1
-            vgmu = vgmu + betai
-            # glist.append(betai.item())
-
-        # if torch.isnan(xp_vec[:, i]).sum():
-        #     pdb.set_trace()
-
-    return vgmu, xp_vec, gradg
 
 
 def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
-
     epsilon = 10e-15
     k = 0
     muup0 = 0
@@ -115,8 +98,13 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     matrix, ni_list = pad_input_dict(in_dict)
     ni_tensor = torch.tensor(ni_list, device=device, dtype=torch.float32)
 
-    r = matrix.shape[1]  # No of Columns
+    # --------------- Create Mask ---------------------
+    inv_mask = torch.zeros(matrix.shape, device=device, dtype=torch.float32)
+    for i in range(matrix.shape[1]):
+        inv_mask[:ni_list[i],i] = torch.ones(ni_list[i])
+    # -------------------------------------------------
 
+    r = matrix.shape[1]  # No of Columns
     critmu = torch.tensor([])
     critval_list = []
 
@@ -146,7 +134,12 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     critmu = critmu[critmu > 1e-6] # we only need the critival values here, not the zeros in col.
 
     k = k - r * sps
-    vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0)
+
+    # -------------------- gmu --------------------
+    xp_mat = torch.zeros([pos_matrix.shape[0], pos_matrix.shape[1]]).to(device)
+    # gmu_args = {'xp_mat':xp_mat, 'ni_tensor':ni_tensor}
+    
+    vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
 
 #----------------------------------------------------------------------------------------
 
@@ -308,4 +301,3 @@ k = 0
 # spNew = sparsity(xp_vec)
 
 # print("The Output Sparsity: " + str(spNew))
-
