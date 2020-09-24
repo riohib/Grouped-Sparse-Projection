@@ -19,6 +19,7 @@ CNN_LeNet_5/data
 *.sh
 *.pt
 *.gz
+*.pkl
 
 models.py
 prune.py
