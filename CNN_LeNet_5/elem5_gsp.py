@@ -22,7 +22,8 @@ import logging
 from utils.helper import *
 
 import utils.vec_projection as gsp_vec
-import utils.torch_projection as gsp_reg
+# import utils.torch_projection as gsp_reg
+import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
 import utils.sps_tools as sps_tools
 
@@ -119,7 +120,8 @@ def train(epochs, decay=0, threshold=0.0):
             optimizer.zero_grad()
 
             if (itr % gsp_interval == 0) and args.gsp == 'pre':
-                sps_tools.global_gsp(model, itr, sps)
+                # sps_tools.global_gsp(model, itr, sps)
+                gsp_reg.groupedsparseproj(model, itr, sps)
                 # print("GSP-Pre-ing: itr:  " + str(itr))
 
             output = model(data)
@@ -147,9 +149,9 @@ def train(epochs, decay=0, threshold=0.0):
             optimizer.step()
 
             if (itr % gsp_interval == 0) and args.gsp == 'post':
-                sps_tools.global_gsp(model, itr, sps)
+                # sps_tools.global_gsp(model, itr, sps)
                 # print("GSP-Post-ing: itr:  " + str(itr))
-
+                gsp_reg.groupedsparseproj(model, itr, sps)
             
             if batch_idx % args.log_interval == 0:
                 done = batch_idx * len(data)
@@ -191,7 +193,7 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/GlobalSps.pth') 
+torch.save(model.state_dict(), 'saves/VarGSP.pth') 
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

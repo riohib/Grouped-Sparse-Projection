@@ -27,7 +27,15 @@ def sparsity(matrix):
 
     return sps_avg
 
+def pad_input_dict(in_dict):
+    ni_list = [x.shape[0] for x in in_dict.values()]
+    max_rows = max(ni_list)
 
+    matrix = torch.zeros(max_rows, len(in_dict))
+
+    for ind in range(len(in_dict)):
+        matrix[:ni_list[ind],ind] = in_dict[ind]
+    return matrix, ni_list
 
 
 def checkCritical(pos_matrix, precision=1e-6):
@@ -50,6 +58,8 @@ def checkCritical(pos_matrix, precision=1e-6):
 
 
 def gmu(p_matrix, xp_mat, mu=0, *args):
+    ni_tensor, inv_mask = args
+
     vgmu = 0
     gradg = 0
     ni_tlist = ni_tensor.int()
@@ -76,19 +86,23 @@ def gmu(p_matrix, xp_mat, mu=0, *args):
 
     # vgmu calculation
     ## When indtp is not empty (the columns whose norm are not zero)
-    # xp_mat /= mnorm
+    xp_mat *= inv_mask 
     xp_mat[:, col_norm_mask] /= mnorm[col_norm_mask]
 
     ## When indtp IS empty (the columns whose norm ARE zero)
-    max_elem_rows = torch.argmax(matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
+    max_elem_rows = torch.argmax(p_matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
     xp_mat[max_elem_rows, ~col_norm_mask] = 1
 
     # vgmu computation
     vgmu_mat = betai * torch.sum(xp_mat, dim=0)
     vgmu = torch.sum(vgmu_mat)
 
+    return vgmu, xp_mat
 
 
+# --------------------------------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------------------------------- #
 def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
     epsilon = 10e-15
@@ -139,7 +153,7 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     xp_mat = torch.zeros([pos_matrix.shape[0], pos_matrix.shape[1]]).to(device)
     # gmu_args = {'xp_mat':xp_mat, 'ni_tensor':ni_tensor}
     
-    vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
+    vgmu, xp_mat = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
 
 #----------------------------------------------------------------------------------------
 
@@ -189,6 +203,7 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
             # Guarantees linear convergence
             if (muup - mulow) > linrat * delta and abs(oldmu - newmu) < (1 - linrat) * delta:
                 newmu = (mulow + muup) / 2
+                
                 gnew, xnew, gpnew = gmu(matrix, xp_vec, newmu)
 
                 if gnew < k:
@@ -219,30 +234,20 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
 
     alpha = torch.zeros([1, matrix.shape[1]], device=device)
     for i in range(r):
-        alpha[0, i] = torch.matmul(xp_vec[:, i], pos_matrix[:, i])
-        xp_vec[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_vec[:, i])
+        alpha[0, i] = torch.matmul(xp_mat[:, i], pos_matrix[:, i])
+        xp_mat[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_mat[:, i])
 
     return xp_vec
 
 
-def load_matrix_debug(test_matrix):
-    with open(test_matrix, "rb") as fpA:  # Pickling
-        matrix = pickle.load(fpA)
-    return matrix
+# def load_matrix_debug(test_matrix):
+#     with open(test_matrix, "rb") as fpA:  # Pickling
+#         matrix = pickle.load(fpA)
+#     return matrix
 
 
-def pad_input_dict(in_dict):
-    ni_list = [x.shape[0] for x in in_dict.values()]
-    max_rows = max(ni_list)
-
-    matrix = torch.zeros(max_rows, len(in_dict))
-
-    for ind in range(len(in_dict)):
-        matrix[:ni_list[ind],ind] = in_dict[ind]
-    return matrix, ni_list
 
 def load_matrix_debug(mat_tuple):
-    
     matrix_1, matrix_2, matrix_3, matrix_4 = mat_tuple
     with open(matrix_1, "rb") as fpA:  # Pickling
         matrix_1 = pickle.load(fpA)
@@ -272,12 +277,12 @@ start_time = time.time()
 sps = 0.9
 precision = 1e-6
 linrat = 0.9
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+X = groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9)
 print("--- %s seconds ---" % (time.time() - start_time))
 
-r = 100
-n = 10000
-k = 0
+# r = 100
+# n = 10000
+# k = 0
 
 # ## Data Loacing
 # # mu, sigma = 0, 1 # mean and standard deviation

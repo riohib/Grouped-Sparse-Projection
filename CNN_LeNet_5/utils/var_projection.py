@@ -230,23 +230,23 @@ def load_matrix_debug(mat_tuple):
 
 
 # ## ********************************************************************************** ##
-# mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
-# matrix = load_matrix_debug(mat_tuple)
+mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
+matrix = load_matrix_debug(mat_tuple)
 
-# start_time = time.time()
-# sps = 0.9
-# precision = 1e-6
-# linrat = 0.9
-# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-# print("--- %s seconds ---" % (time.time() - start_time))
+start_time = time.time()
+sps = 0.9
+precision = 1e-6
+linrat = 0.9
+X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+print("--- %s seconds ---" % (time.time() - start_time))
 
-# r = 100
-# n = 10000
-# k = 0
+r = 100
+n = 10000
+k = 0
 
-# ## Data Loacing
-# # mu, sigma = 0, 1 # mean and standard deviation
-# # x = np.random.normal(mu, sigma, (10000, 100)) * 10
+## Data Loacing
+# mu, sigma = 0, 1 # mean and standard deviation
+# x = np.random.normal(mu, sigma, (10000, 100)) * 10
 
 # with open('matnew.pkl', 'rb') as fin:
 #     x = pickle.load(fin)

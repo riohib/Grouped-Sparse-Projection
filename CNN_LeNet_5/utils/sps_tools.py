@@ -13,11 +13,11 @@ from operator import mul
 from net.models import LeNet_5 as LeNet
 import util
 import utils.vec_projection as gsp_vec
-import utils.torch_projection as gsp_reg
+# import utils.torch_projection as gsp_reg
+import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
 
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
-
 
 
 #=====================================================================================================
@@ -75,10 +75,11 @@ def cnn_layer_Ploter(model, title):
 
 #=====================================================================================================
 ## Select which GSP Function to use:
-# gs_projection = gsp_reg.groupedsparseproj
-gs_projection = gsp_vec.groupedsparseproj
+gs_projection = gsp_reg.groupedsparseproj
+# gs_projection = gsp_vec.groupedsparseproj
 # gs_projection = gsp_gpu.groupedsparseproj
 #=====================================================================================================
+
 def global_gsp(model, itr, sps):
     params_d = {}
     weight_d = {}
@@ -161,3 +162,24 @@ def gsp(model, itr, sps):
         logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
                         (gsp_vec.sparsity(reshaped_w4), gsp_vec.sparsity(model.fc2.weight.detach())))
 # ===================================== GSP FUNCTION ===========================================
+
+def var_GSP(model, itr, sps):
+    weight_d = {}
+    shape_list = []
+
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape_list.append(param.data.shape)
+            weight_d[counter] = param.detach().view(-1)
+            counter += 1
+    
+    sps_weight = gs_projection(weight_d, sps)
+    
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape = shape_list[counter]
+            param.data = sps_weight[counter].view(shape).requires_grad_(True)
+            counter += 1
+
