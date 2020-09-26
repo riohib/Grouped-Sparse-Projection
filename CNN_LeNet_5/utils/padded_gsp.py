@@ -299,18 +299,18 @@ def load_matrix_debug(mat_tuple):
     return matrix
 
 
-# ## ********************************************************************************** ##
-mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
-in_dict = load_matrix_debug(mat_tuple)
+# # ## ********************************************************************************** ##
+# mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
+# in_dict = load_matrix_debug(mat_tuple)
 
-# ## ********************************************************************************** ##
+# # ## ********************************************************************************** ##
 
-start_time = time.time()
-sps = 0.9
-precision = 1e-6
-linrat = 0.9
-X, ni_list = groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# start_time = time.time()
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
+# X, ni_list = groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
 
-out_dict = unpad_output_mat(X, ni_list)
+# out_dict = unpad_output_mat(X, ni_list)
