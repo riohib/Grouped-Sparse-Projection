@@ -14,18 +14,27 @@ def sparsity(matrix):
     ni = matrix.shape[0]
 
     zero_col_ind = (matrix.sum(0) == 0).nonzero().view(-1)  # Get Indices of all zero vector columns.
-
-    # pdb.set_trace()
-
     spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
-
     if len(zero_col_ind) != 0:
         spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
-
-    # pdb.set_trace()
     sps_avg =  spx_c.sum() / matrix.shape[1]
 
     return sps_avg
+
+def sparsity_dict(in_dict):
+    r = len(in_dict)
+    spx = 0
+    spxList = []
+    for i in range(r):
+        if in_dict[i].sum() == 0:
+            spx = 1
+            spxList.append(spx)
+        else:
+            ni = in_dict[i].shape[0]
+            spx = (np.sqrt(ni) - torch.norm(in_dict[i], 1) / torch.norm(in_dict[i], 2)) / (np.sqrt(ni) - 1)
+            spxList.append(spx)
+        spx = sum(spxList) / r
+    return spx
 
 def pad_input_dict(in_dict):
     ni_list = [x.shape[0] for x in in_dict.values()]
@@ -36,6 +45,13 @@ def pad_input_dict(in_dict):
     for ind in range(len(in_dict)):
         matrix[:ni_list[ind],ind] = in_dict[ind]
     return matrix, ni_list
+
+
+def unpad_output_mat(out_mat, ni_list):
+    out_dict = {}
+    for ind in range(out_mat.shape[1]):
+        out_dict[ind] = out_mat[:ni_list[ind],ind]
+    return out_dict
 
 
 def checkCritical(pos_matrix, precision=1e-6):
@@ -70,10 +86,8 @@ def gmu(p_matrix, xp_mat, mu=0, *args):
 #----------------------------------------------------------------------------------------
     # ni_tensor
     betai = 1 / (torch.sqrt(ni_tensor) - 1)
-
     xp_mat = p_matrix - (mu * betai)
     indtp = xp_mat > 0
-
     xp_mat.relu_()
 
 
@@ -83,21 +97,49 @@ def gmu(p_matrix, xp_mat, mu=0, *args):
     mnorm_inf[mnorm_inf == 0] = float("Inf")
     col_norm_mask = (mnorm > 0)
 
+#----------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------
+    # mat_mask =  (col_norm_mask.float().view(1,784) * torch.ones(300,1))
+    # mat_mask = (col_norm_mask.float().view(1, matrix.shape[1]) * torch.ones(matrix.shape[0], 1))
 
+    nip = torch.sum(xp_mat > 0, dim=0)  # columnwise number of values > 0
+
+    # needs the if condition mnorm> 0 (it's included)
+    # Terms in the Gradient Calculation
+    term2 = torch.pow(torch.sum(xp_mat, dim=0), 2)
+    mnorm_inv = torch.pow(mnorm_inf, -1)
+    mnorm_inv3 = torch.pow(mnorm_inf, -3)
+
+    # The column vectors with norm mnorm == 0 zero, should not contribute to the gradient sum.
+    # In the published algorithm, we only calculate gradients for condition: mnorm> 0
+    # To vectorize, we include in the matrix columns where mnorm == 0, but we manually replace
+    # the inf after divide by zero with 0, so that the grad of that column becomes 0 and
+    # doesn't contribute to the sum.
+    # mnorm_inv[torch.isinf(mnorm_inv)] = 0
+    # mnorm_inv3[torch.isinf(mnorm_inv3)] = 0
+
+    # Calculate Gradient
+    gradg_mat = torch.pow(betai, 2) * (-nip * mnorm_inv + term2 * mnorm_inv3)
+    gradg = torch.sum(gradg_mat)
+
+#----------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------
     # vgmu calculation
     ## When indtp is not empty (the columns whose norm are not zero)
     xp_mat *= inv_mask 
     xp_mat[:, col_norm_mask] /= mnorm[col_norm_mask]
 
-    ## When indtp IS empty (the columns whose norm ARE zero)
-    max_elem_rows = torch.argmax(p_matrix, dim=0)[~col_norm_mask]  # The Row Indices where maximum of that column occurs
+    ### When indtp IS empty (the columns whose norm ARE zero)
+    # The Row Indices where maximum of that column occurs
+    max_elem_rows = torch.argmax(p_matrix, dim=0)[~col_norm_mask] 
+    
     xp_mat[max_elem_rows, ~col_norm_mask] = 1
 
     # vgmu computation
     vgmu_mat = betai * torch.sum(xp_mat, dim=0)
     vgmu = torch.sum(vgmu_mat)
 
-    return vgmu, xp_mat
+    return vgmu, xp_mat, gradg
 
 
 # --------------------------------------------------------------------------------------------------- #
@@ -123,12 +165,10 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     critval_list = []
 
     vgmu = torch.zeros(1, device=device)
-    # maxxi_list = []
 
     # These operations were inside the loop, but doesn't need to be.
     matrix_sign = torch.sign(matrix)
     pos_matrix = matrix_sign * matrix
-    xp_vec = torch.zeros([matrix.shape[0], matrix.shape[1]]).to(device)
     ni = matrix.shape[0]
 
 #----------------------------------------------------------------------------------------
@@ -153,11 +193,9 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     xp_mat = torch.zeros([pos_matrix.shape[0], pos_matrix.shape[1]]).to(device)
     # gmu_args = {'xp_mat':xp_mat, 'ni_tensor':ni_tensor}
     
-    vgmu, xp_mat = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
+    vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
 
 #----------------------------------------------------------------------------------------
-
-
     if vgmu < k:
         xp_mat = matrix
         gxpmu = vgmu
@@ -169,13 +207,14 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
         glow = vgmu
         muup = muup0
         # Initialization on mu using 0, it seems to work best because the
-        # slope at zero is rather steep while it is gets falt for large mu
+        # slope at zero is rather steep while it is gets flat for large mu
         newmu = 0
         gnew = glow
         gpnew = gradg  # g'(0)
         delta = muup - mulow
         switch = True
 
+        # pdb.set_trace()
         while abs(gnew - k) > precision * r and numiter < 100:
             oldmu = newmu
             # % Secant method:
@@ -189,8 +228,9 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
             if (newmu >= muup) or (newmu <= mulow):  # If Newton goes out of the interval, use bisection
                 newmu = (mulow + muup) / 2
 
-            gnew, xnew, gpnew = gmu(matrix, xp_vec, newmu)
-
+            # print( 'Value of numiter: ' + str(numiter))
+            gnew, xnew, gpnew = gmu(pos_matrix, xp_mat, newmu, ni_tensor, inv_mask)
+                                
             if gnew < k:
                 gup = gnew
                 xup = xnew
@@ -203,8 +243,7 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
             # Guarantees linear convergence
             if (muup - mulow) > linrat * delta and abs(oldmu - newmu) < (1 - linrat) * delta:
                 newmu = (mulow + muup) / 2
-                
-                gnew, xnew, gpnew = gmu(matrix, xp_vec, newmu)
+                gnew, xnew, gpnew = gmu(pos_matrix, xp_mat, newmu, ni_tensor, inv_mask)
 
                 if gnew < k:
                     gup = gnew
@@ -222,31 +261,24 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
                 print('The objective function is discontinuous around mu^*.')
                 xp = xnew
                 gxpmu = gnew
-        try:
-            xp_vec = xnew
-            # print(' xp_vec = xnew')
-        except:
-            scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
-
+        
+        # ----- While Loop Ends -----
+        xp_mat = xnew
         gxpmu = gnew
 
-    # pdb.set_trace()
+    # -------------------------------------------
+    # We need the column to column dot product between the two matrices xp_mat and pos_matrix
+    # Hence, we resort to Matrix- Multiplication and then extract the diagonal elements.
+    # This is equivalent to the above.
+    alpha = torch.diag(torch.matmul(xp_mat.T, pos_matrix))
+    xp_mat = alpha * (xp_mat * matrix_sign)
+    # -------------------------------------------
 
-    alpha = torch.zeros([1, matrix.shape[1]], device=device)
-    for i in range(r):
-        alpha[0, i] = torch.matmul(xp_mat[:, i], pos_matrix[:, i])
-        xp_mat[:, i] = alpha[:, i] * (matrix_sign[:, i] * xp_mat[:, i])
-
-    return xp_vec
-
-
-# def load_matrix_debug(test_matrix):
-#     with open(test_matrix, "rb") as fpA:  # Pickling
-#         matrix = pickle.load(fpA)
-#     return matrix
+    return xp_mat, ni_list
 
 
 
+# ------------------------------------------------------------------------------------
 def load_matrix_debug(mat_tuple):
     matrix_1, matrix_2, matrix_3, matrix_4 = mat_tuple
     with open(matrix_1, "rb") as fpA:  # Pickling
@@ -277,32 +309,8 @@ start_time = time.time()
 sps = 0.9
 precision = 1e-6
 linrat = 0.9
-X = groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9)
+X, ni_list = groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9)
 print("--- %s seconds ---" % (time.time() - start_time))
 
-# r = 100
-# n = 10000
-# k = 0
 
-# ## Data Loacing
-# # mu, sigma = 0, 1 # mean and standard deviation
-# # x = np.random.normal(mu, sigma, (10000, 100)) * 10
-
-# with open('matnew.pkl', 'rb') as fin:
-#     x = pickle.load(fin)
-# ## ****************************************
-
-# xPos = np.abs(x)
-
-# for i in range(r):
-#     k = k + np.sqrt(n) / (np.sqrt(n) - 1)
-
-# sp = sparsity(x)
-
-# print("The Sparsity of input set of vectors: " + str(sp))
-
-# xp_vec = groupedsparseproj(x, 0.8)
-
-# spNew = sparsity(xp_vec)
-
-# print("The Output Sparsity: " + str(spNew))
+out_dict = unpad_output_mat(X, ni_list)
