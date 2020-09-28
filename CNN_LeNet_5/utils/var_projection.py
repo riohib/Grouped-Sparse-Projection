@@ -9,21 +9,6 @@ import time
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def sparsity(matrix):
-    r = len(matrix)  # no of vectors
-    spx = 0
-    spxList = []
-
-    for i in range(r):
-        if matrix[i].sum() == 0:
-            spx = 1
-            spxList.append(spx)
-        else:
-            ni = matrix[i].shape[0]
-            spx = (np.sqrt(ni) - torch.norm(matrix[i], 1) / torch.norm(matrix[i], 2)) / (np.sqrt(ni) - 1)
-            spxList.append(spx)
-        spx = sum(spxList) / r
-    return spx
 
 def checkCritical(vector, critval_list, precision=1e-6):
     max_element = max(vector).item()
@@ -230,19 +215,19 @@ def load_matrix_debug(mat_tuple):
 
 
 # ## ********************************************************************************** ##
-mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
-matrix = load_matrix_debug(mat_tuple)
+# mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
+# matrix = load_matrix_debug(mat_tuple)
 
-start_time = time.time()
-sps = 0.9
-precision = 1e-6
-linrat = 0.9
-X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
-print("--- %s seconds ---" % (time.time() - start_time))
+# start_time = time.time()
+# sps = 0.9
+# precision = 1e-6
+# linrat = 0.9
+# X = groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9)
+# print("--- %s seconds ---" % (time.time() - start_time))
 
-r = 100
-n = 10000
-k = 0
+# r = 100
+# n = 10000
+# k = 0
 
 ## Data Loacing
 # mu, sigma = 0, 1 # mean and standard deviation

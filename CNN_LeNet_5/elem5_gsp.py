@@ -25,9 +25,9 @@ import utils.vec_projection as gsp_vec
 # import utils.torch_projection as gsp_reg
 import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
+import utils.padded_gsp as gsp_model
 import utils.sps_tools as sps_tools
 
-from CNN_LeNet_5.utils import padded_gsp as gsp_pad
 
 
 os.makedirs('saves', exist_ok=True)
@@ -111,7 +111,7 @@ def train(epochs, decay=0, threshold=0.0):
     itr=0
     model.train()
     pbar = tqdm(range(epochs), total=epochs)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
     curves = np.zeros((epochs,14))
     
     for epoch in pbar:
@@ -151,8 +151,9 @@ def train(epochs, decay=0, threshold=0.0):
 
             if (itr % gsp_interval == 0) and args.gsp == 'post':
                 # sps_tools.global_gsp(model, itr, sps)
-                # print("GSP-Post-ing: itr:  " + str(itr))
-                gsp_reg.groupedsparseproj(model, itr, sps)
+                print("GSP-Post-ing: itr:  " + str(itr))
+                # gsp_reg.groupedsparseproj(model, itr, sps)
+                sps_tools.gsp_model_apply(model, sps)
             
             if batch_idx % args.log_interval == 0:
                 done = batch_idx * len(data)
@@ -194,7 +195,7 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/VarGSP.pth') 
+torch.save(model.state_dict(), 'saves/gsp_model.pth') 
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

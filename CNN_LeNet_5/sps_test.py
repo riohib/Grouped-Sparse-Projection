@@ -10,22 +10,23 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from net.models import LeNet_5 as LeNet
-import util
-
 import time
 import scipy.io
+import copy
 
 from matplotlib import pyplot as plt
 import logging
 
+from net.models import LeNet_5 as LeNet
+import util
+
 from utils.helper import *
+import utils.sps_tools as sps_tools
 
 import utils.vec_projection as gsp_vec
-# import utils.torch_projection as gsp_reg
 import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
-
+import utils.padded_gsp as gsp_model
 
 # Select Device
 use_cuda = torch.cuda.is_available()
@@ -35,7 +36,6 @@ device = torch.device("cuda" if use_cuda else 'cpu')
 
 model_dh = LeNet(mask=False).to(device)
 model_gsp = LeNet(mask=False).to(device)
-
 dhm_path = './saves/DH/elt_0.01_2.pth'
 gspm_path = './saves/S0.97/S0.97_3_pre.pth'
 
@@ -123,3 +123,20 @@ gsp_weights = {
     'fc1' : gsp_param_dict['fc1.weight'],
     'fc2' : gsp_param_dict['fc2.weight'],
 }
+
+
+## Global Model Projection
+
+model = copy.deepcopy(model_dh)
+sps_tools.cnn_model_sps(model)
+
+in_dict = sps_tools.cnn_make_dict(model)
+
+gsp_model.sparsity_dict(in_dict)
+X, ni_list = gsp_model.groupedsparseproj(in_dict, 0.9)
+out_dict = gsp_model.unpad_output_mat(X, ni_list)
+gsp_model.sparsity_dict(out_dict)
+
+
+# Put Dict back into model
+sps_tools.cnn_dict_to_model(model, out_dict)

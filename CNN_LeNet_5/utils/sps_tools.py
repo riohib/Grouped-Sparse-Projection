@@ -16,12 +16,50 @@ import utils.vec_projection as gsp_vec
 # import utils.torch_projection as gsp_reg
 import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
+import utils.padded_gsp as gsp_model
+
 
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 
 
+#======================================================================================================
+#====================================== Sparsity Calculator ===========================================
 #=====================================================================================================
-def layer_wise_sps(model):
+def sparsity(matrix):
+    ni = matrix.shape[0]
+
+    # Get Indices of all zero vector columns.
+    zero_col_ind = (abs(matrix.sum(0) - 0) < 2.22e-16).nonzero().view(-1)  
+    spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
+    if len(zero_col_ind) != 0:
+        spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
+    sps_avg =  spx_c.sum() / matrix.shape[1]
+    return sps_avg
+
+def sparsity_dict(in_dict):
+    r = len(in_dict)
+    spx = 0
+    spxList = []
+    for i in range(r):
+        if in_dict[i].sum() == 0:
+            spx = 1
+            spxList.append(spx)
+        else:
+            ni = in_dict[i].shape[0]
+            spx = (np.sqrt(ni) - torch.norm(in_dict[i], 1) / torch.norm(in_dict[i], 2)) / (np.sqrt(ni) - 1)
+            spxList.append(spx)
+        spx = sum(spxList) / r
+    return spx
+#=====================================================================================================
+
+def layer_wise_sps(arg):
+    if isinstance(arg, LeNet):
+        model = arg
+    elif isinstance(arg, str):
+        PATH = arg
+        model = LeNet(mask=False).to(device)
+        model.load_state_dict(torch.load(PATH,map_location=device) )
+
     w1 = model.conv1.weight.detach()
     w2 = model.conv2.weight.detach()
     w3 = model.fc1.weight.detach()
@@ -32,13 +70,22 @@ def layer_wise_sps(model):
     reshaped_w3 = w3
     reshaped_w4 = w4
 
-    print("Layer 1 Sparsity w1: %.2f \n" % (gsp_vec.sparsity(reshaped_w1)))
-    print("Layer 2 Sparsity w2: %.2f \n" % (gsp_vec.sparsity(reshaped_w2)))
-    print("Layer 3 Sparsity w3: %.2f \n" % (gsp_vec.sparsity(reshaped_w3)))
-    print("Layer 4 Sparsity w4: %.2f \n" % (gsp_vec.sparsity(reshaped_w4)))
+    print("Layer 1 Sparsity w1: %.2f \n" % (sparsity(reshaped_w1)))
+    print("Layer 2 Sparsity w2: %.2f \n" % (sparsity(reshaped_w2)))
+    print("Layer 3 Sparsity w3: %.2f \n" % (sparsity(reshaped_w3)))
+    print("Layer 4 Sparsity w4: %.2f \n" % (ssparsity(reshaped_w4)))
+
+def get_cnn_layer_shape(model):
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            print(f"Paramater Shape: {param.shape}")
+            counter += 0
+
+def get_saved_model_sps(PATH):
 
 
-def model_sps(model):
+def cnn_model_sps(model):
     w1 = model.conv1.weight.detach()
     w2 = model.conv2.weight.detach()
     w3 = model.fc1.weight.detach()
@@ -50,7 +97,7 @@ def model_sps(model):
     reshaped_w4 = w4.view(500,-1)
     
     tot_weight = torch.cat([reshaped_w1,reshaped_w2,reshaped_w3,reshaped_w4], dim=1)
-    # print("Total Model Sparsity w1: %.2f \n" % (gsp_vec.sparsity(tot_weight)))
+    print("Total Model Sparsity w1: %.2f \n" % (gsp_vec.sparsity(tot_weight)))
     return gsp_vec.sparsity(tot_weight)
 
 def cnn_layer_Ploter(model, title):
@@ -72,10 +119,33 @@ def cnn_layer_Ploter(model, title):
     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     fig.colorbar(im, cax=cbar_ax)
 
+## ====================================================================== ##
+## =============== Helper Functions for Global GSP with pad ============= ##
+## ====================================================================== ##
+def cnn_make_dict(model):
+    in_dict = {}
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            in_dict[counter] = param.detach().view(-1)
+            counter += 1
+    return in_dict
+
+def cnn_dict_to_model(model, out_dict):
+    param_d = {}
+    index = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            layer_shape = param.shape
+            param_d[index] = param
+            # print(layer_shape)
+            # print(f"out-shape: {out_dict[index].shape}")
+            param.data = out_dict[index].view(layer_shape)
+            index += 1
 
 #=====================================================================================================
 ## Select which GSP Function to use:
-gs_projection = gsp_reg.groupedsparseproj
+# gs_projection = gsp_reg.groupedsparseproj
 # gs_projection = gsp_vec.groupedsparseproj
 # gs_projection = gsp_gpu.groupedsparseproj
 #=====================================================================================================
@@ -183,3 +253,19 @@ def var_GSP(model, itr, sps):
             param.data = sps_weight[counter].view(shape).requires_grad_(True)
             counter += 1
 
+
+# ===================================== GSP FUNCTION ===========================================
+def gsp_model_apply(model, sps):
+    ## Global Model Projection
+
+    in_dict = cnn_make_dict(model)
+    
+    try:
+        X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
+    except:
+        import pdb; pdb.set_trace()
+
+    out_dict = gsp_model.unpad_output_mat(X, ni_list)
+
+    # Put Dict back into model
+    cnn_dict_to_model(model, out_dict)

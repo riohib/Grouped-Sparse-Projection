@@ -9,39 +9,12 @@ import time
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Brand New Comment
-
-def sparsity(matrix):
-    ni = matrix.shape[0]
-
-    zero_col_ind = (matrix.sum(0) == 0).nonzero().view(-1)  # Get Indices of all zero vector columns.
-    spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
-    if len(zero_col_ind) != 0:
-        spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
-    sps_avg =  spx_c.sum() / matrix.shape[1]
-
-    return sps_avg
-
-def sparsity_dict(in_dict):
-    r = len(in_dict)
-    spx = 0
-    spxList = []
-    for i in range(r):
-        if in_dict[i].sum() == 0:
-            spx = 1
-            spxList.append(spx)
-        else:
-            ni = in_dict[i].shape[0]
-            spx = (np.sqrt(ni) - torch.norm(in_dict[i], 1) / torch.norm(in_dict[i], 2)) / (np.sqrt(ni) - 1)
-            spxList.append(spx)
-        spx = sum(spxList) / r
-    return spx
 
 def pad_input_dict(in_dict):
     ni_list = [x.shape[0] for x in in_dict.values()]
     max_rows = max(ni_list)
 
-    matrix = torch.zeros(max_rows, len(in_dict))
+    matrix = torch.zeros(max_rows, len(in_dict), device=device)
 
     for ind in range(len(in_dict)):
         matrix[:ni_list[ind],ind] = in_dict[ind]
@@ -66,7 +39,6 @@ def checkCritical(pos_matrix, precision=1e-6):
     # Boolean of vector cols with non-trivial critical values
     crit_cols = torch.where(num_crit_points.float() > 1, torch.ones(pos_matrix.shape[1], device=device), \
                             torch.zeros(pos_matrix.shape[1], device=device))
-
     # getting non-trivial critical values
     critval_list = max_elems[crit_cols.bool()]
     critval_all_col = max_elems * crit_cols
@@ -144,7 +116,7 @@ def gmu(p_matrix, xp_mat, mu=0, *args):
 
 
 # --------------------------------------------------------------------------------------------------- #
-# --------------------------------------------------------------------------------------------------- #
+# ------------------------------------- groupedsparseproj ------------------------------------------- #
 # --------------------------------------------------------------------------------------------------- #
 def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
@@ -180,12 +152,12 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     # where the two (or more) largest entries of x{i} are equal to one another.
     critical_val, max_xi, cval_all_col = checkCritical(pos_matrix)
 
-    muup0 = max(max_xi * (np.sqrt(ni_tensor) - 1))
+    muup0 = max(max_xi * (torch.sqrt(ni_tensor) - 1))
 
     # cval_all_col was extracted for the sole reason that we can multiply the critical
     # values withe the appropriate column ni below. Hence, it preserves the column information
     # of where the critical values came from.
-    critmu = cval_all_col * (np.sqrt(ni_tensor) - 1) 
+    critmu = cval_all_col * (torch.sqrt(ni_tensor) - 1) 
     critmu = critmu[critmu > 1e-6] # we only need the critival values here, not the zeros in col.
 
     k = k - r * sps
@@ -197,7 +169,7 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
 
 #----------------------------------------------------------------------------------------
-    if vgmu < k:
+    if vgmu < k or abs(vgmu-k) < 5e-5:
         xp_mat = matrix
         gxpmu = vgmu
         numiter = 0
@@ -264,7 +236,10 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
                 gxpmu = gnew
         
         # ----- While Loop Ends -----
-        xp_mat = xnew
+        try:
+            xp_mat = xnew
+        except:
+            pdb.set_trace()
         gxpmu = gnew
 
     # -------------------------------------------
@@ -279,28 +254,28 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
 
 
 
-# ------------------------------------------------------------------------------------
-def load_matrix_debug(mat_tuple):
-    matrix_1, matrix_2, matrix_3, matrix_4 = mat_tuple
-    with open(matrix_1, "rb") as fpA:  # Pickling
-        matrix_1 = pickle.load(fpA)
-    with open(matrix_2, "rb") as fpA:  # Pickling
-        matrix_2 = pickle.load(fpA)
-    with open(matrix_3, "rb") as fpA:  # Pickling
-        matrix_3 = pickle.load(fpA)
-    with open(matrix_4, "rb") as fpA:  # Pickling
-        matrix_4 = pickle.load(fpA)
+# # ------------------------------------------------------------------------------------
+# def load_matrix_debug(mat_tuple):
+#     matrix_1, matrix_2, matrix_3, matrix_4 = mat_tuple
+#     with open(matrix_1, "rb") as fpA:  # Pickling
+#         matrix_1 = pickle.load(fpA)
+#     with open(matrix_2, "rb") as fpA:  # Pickling
+#         matrix_2 = pickle.load(fpA)
+#     with open(matrix_3, "rb") as fpA:  # Pickling
+#         matrix_3 = pickle.load(fpA)
+#     with open(matrix_4, "rb") as fpA:  # Pickling
+#         matrix_4 = pickle.load(fpA)
 
-    matrix_1 = torch.from_numpy(matrix_1).view(-1)
-    matrix_2 = torch.from_numpy(matrix_2).view(-1)
-    matrix_3 = torch.from_numpy(matrix_3).view(-1)
-    matrix_4 = torch.from_numpy(matrix_4).view(-1)
+#     matrix_1 = torch.from_numpy(matrix_1).view(-1)
+#     matrix_2 = torch.from_numpy(matrix_2).view(-1)
+#     matrix_3 = torch.from_numpy(matrix_3).view(-1)
+#     matrix_4 = torch.from_numpy(matrix_4).view(-1)
 
-    matrix = {0:matrix_1, 1:matrix_2, 2:matrix_3, 3:matrix_4}
-    return matrix
+#     matrix = {0:matrix_1, 1:matrix_2, 2:matrix_3, 3:matrix_4}
+#     return matrix
 
 
-# # ## ********************************************************************************** ##
+# # # ## ********************************************************************************** ##
 # mat_tuple = ("matrix_1.pkl", "matrix_2.pkl", "matrix_3.pkl", "matrix_4.pkl")
 # in_dict = load_matrix_debug(mat_tuple)
 
