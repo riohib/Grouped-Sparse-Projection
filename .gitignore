@@ -1,11 +1,13 @@
 CNN_LeNet_5/__pycache__
 CNN_LeNet_5/data
+CNN_LeNet_5/old_LeNet5.py
 
 /MLP_LeNet_300/__pycache__
 /MLP_LeNet_300/archived
 /MLP_LeNet_300/data
 /MLP_LeNet_300/gsp_models_trained
 
+.vscode/settings.json
 
 
 *.log

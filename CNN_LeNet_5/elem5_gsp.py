@@ -27,6 +27,7 @@ import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
 import utils.sps_tools as sps_tools
 
+from CNN_LeNet_5.utils import padded_gsp as gsp_pad
 
 
 os.makedirs('saves', exist_ok=True)

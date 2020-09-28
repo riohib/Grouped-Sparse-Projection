@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from net.models import LeNet
 import util
-
+import pdb
 
 import time
 import scipy.io
@@ -22,9 +22,12 @@ import logging
 
 from utils.helper import *
 
+# import utils.helper as prefetch_dataloader
+
 import utils.vec_projection as gsp_vec
 import utils.torch_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
+import utils.sps_tools as sps_tools
 
 from net.models import LeNet
 
@@ -33,7 +36,7 @@ os.makedirs('saves', exist_ok=True)
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST pruning from deep compression paper')
-parser.add_argument('--batch-size', type=int, default=100, metavar='N',
+parser.add_argument('--batch-size', type=int, default=300, metavar='N',
                     help='input batch size for training (default: 100)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
@@ -78,7 +81,7 @@ else:
     print('Not using CUDA!!!')
 
 # Loader
-kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
+kwargs = {'num_workers': 10, 'pin_memory': False} if use_cuda else {}
 train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('data', train=True, download=True,
                    transform=transforms.Compose([
@@ -102,28 +105,6 @@ else:
 
 gsp_interval = 20; sps= args.sps
 
-def gsp(model, itr, sps):
-    w1 = model.fc1.weight.detach()
-    w2 = model.fc2.weight.detach()
-    w3 = model.fc3.weight.detach()
-
-    sparse_w1 = gs_projection(w1, sps)
-    sparse_w2 = gs_projection(w2, sps)
-    sparse_w3 = gs_projection(w3, 0.995)
-
-    model.fc1.weight.data = sparse_w1.clone().requires_grad_(True)
-    model.fc2.weight.data = sparse_w2.clone().requires_grad_(True)
-    model.fc3.weight.data = sparse_w3.clone().requires_grad_(True)
-
-    if itr % 10 == 0:
-        logging.debug(" ------------------- itr No: %s ------------------ \n" % itr)
-        logging.debug("Layer 1 Sparsity w1 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(w1), gsp_vec.sparsity(model.fc1.weight.detach())))
-        logging.debug("Layer 2 Sparsity w2 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(w2), gsp_vec.sparsity(model.fc2.weight.detach())))
-        logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(w3), gsp_vec.sparsity(model.fc3.weight.detach())))
-    # return trial_list
 # ===================================== GSP FUNCTION ===========================================
 
 # Define which model to use
@@ -136,6 +117,9 @@ util.print_model_parameters(model)
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
 initial_optimizer_state_dict = optimizer.state_dict()
 
+num_prefetch = 200
+train_loader_1 = prefetch_dataloader(train_loader, num_prefetch)
+ 
 
 def train(epochs, decay=0, threshold=0.0):
     itr = 0
@@ -146,10 +130,11 @@ def train(epochs, decay=0, threshold=0.0):
     for epoch in pbar:
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
+
             optimizer.zero_grad()
 
             if (itr % gsp_interval == 0) and args.gsp == 'pre':
-                gsp(model, itr, sps)
+                sps_tools.global_gsp(model, itr, sps)
                 print("GSP-Pre-ing: itr:  " + str(itr))
 
             output = model(data)
@@ -176,8 +161,8 @@ def train(epochs, decay=0, threshold=0.0):
             optimizer.step()
 
             if (itr % gsp_interval == 0) and args.gsp == 'post':
-                gsp(model, itr, sps)
-                print("GSP-Post-ing: itr:  " + str(itr))
+                sps_tools.global_gsp(model, itr, sps)
+                # print("GSP-Post-ing: itr:  " + str(itr))
             
             if batch_idx % args.log_interval == 0:
                 done = batch_idx * len(data)
@@ -213,7 +198,8 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/F97_1_elt_'+str(args.decay)+'_'+str(args.reg_type)+'_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'/'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
+# torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'/'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
+torch.save(model.state_dict(), 'saves/Global_gsp'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

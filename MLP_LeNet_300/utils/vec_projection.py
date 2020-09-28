@@ -10,24 +10,40 @@ import time
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+# def sparsity(matrix):
+#     r = matrix.shape[1]  # no of vectors
+
+#     spx = 0
+#     spxList = []
+#     for i in range(r):
+#         if matrix[:, i].sum() == 0:
+#             spx = 1
+#             spxList.append(spx)
+#             print('here')
+#         else:
+#             ni = matrix.shape[0]
+#             spx = (np.sqrt(ni) - torch.norm(matrix[:, i], 1) / torch.norm(matrix[:, i], 2)) / (np.sqrt(ni) - 1)
+#             spxList.append(spx)
+#         spx = sum(spxList) / r
+
+#     return spx
+
 def sparsity(matrix):
-    r = matrix.shape[1]  # no of vectors
+    ni = matrix.shape[0]
 
-    spx = 0
-    spxList = []
-    for i in range(r):
-        if matrix[:, i].sum() == 0:
-            spx = 1
-            spxList.append(spx)
-            # print('here')
-        else:
-            ni = matrix.shape[0]
-            spx = (np.sqrt(ni) - torch.norm(matrix[:, i], 1) / torch.norm(matrix[:, i], 2)) / (np.sqrt(ni) - 1)
-            spxList.append(spx)
-        spx = sum(spxList) / r
+    zero_col_ind = (matrix.sum(0) == 0).nonzero().view(-1)  # Get Indices of all zero vector columns.
 
-    return spx
+    # pdb.set_trace()
 
+    spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
+
+    if len(zero_col_ind) != 0:
+        spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
+
+    # pdb.set_trace()
+    sps_avg =  spx_c.sum() / matrix.shape[1]
+
+    return sps_avg
 
 def checkCritical(matrix, critval_list, precision=1e-6):
     max_elems = torch.max(matrix, 0)[0]
@@ -213,6 +229,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
             # print(' xp_mat = xnew')
         except:
             scipy.io.savemat('matrix.mat', mdict={'arr': matrix})
+            # pass
 
         gxpmu = gnew
 

@@ -13,18 +13,15 @@ from operator import mul
 from net.models import LeNet_5 as LeNet
 import util
 import utils.vec_projection as gsp_vec
-import utils.torch_projection as gsp_reg
+# import utils.torch_projection as gsp_reg
+import utils.var_projection as gsp_reg
 import utils.gpu_projection as gsp_gpu
 
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 
 
-
 #=====================================================================================================
 def layer_wise_sps(model):
-
-    
-
     w1 = model.conv1.weight.detach()
     w2 = model.conv2.weight.detach()
     w3 = model.fc1.weight.detach()
@@ -42,19 +39,6 @@ def layer_wise_sps(model):
 
 
 def model_sps(model):
-    
-    # params_d = {}
-    # weight_d = {}
-
-    # for name, param in model.named_parameters(): 
-    #     params_d[name] = param.detach()
-    #     if 'weight' in name:
-    #         weight_d[name] = param.detach()
-
-    # shape_list = [reduce(mul, list(y.shape)) for x, y in weight_d.items()]   
-    # gcd_dim = reduce(gcd, shape_list)
-
-    
     w1 = model.conv1.weight.detach()
     w2 = model.conv2.weight.detach()
     w3 = model.fc1.weight.detach()
@@ -89,20 +73,13 @@ def cnn_layer_Ploter(model, title):
     fig.colorbar(im, cax=cbar_ax)
 
 
-def mlp_model_sps(model):
-    w1 = model.fc1.weight.data.detach().view(100,-1)
-    w2 = model.fc2.weight.data.detach().view(100,-1)
-    w3 = model.fc3.weight.data.detach().view(100,-1)
-
-    tot_weight = torch.cat((w1,w2,w3), dim=1)
-    return gsp_vec.sparsity(tot_weight)
-
 #=====================================================================================================
 ## Select which GSP Function to use:
-# gs_projection = gsp_reg.groupedsparseproj
-gs_projection = gsp_vec.groupedsparseproj
+gs_projection = gsp_reg.groupedsparseproj
+# gs_projection = gsp_vec.groupedsparseproj
 # gs_projection = gsp_gpu.groupedsparseproj
 #=====================================================================================================
+
 def global_gsp(model, itr, sps):
     params_d = {}
     weight_d = {}
@@ -122,7 +99,7 @@ def global_gsp(model, itr, sps):
     second_dim = []
 
     for k, v in weight_d.items():
-        reshaped = v.view(gcd_dim, -1)
+        reshaped = v.view(int(gcd_dim)/10, -1)
         second_dim.append(reshaped.shape[1])  # store second dim for putting back tensor into model.
         global_w_tup = global_w_tup + (reshaped,) #creating new tuple, as torch.cat takes tuple.
 
@@ -146,7 +123,7 @@ def global_gsp(model, itr, sps):
     
     if itr % 600 == 0:
         logging.debug(f" ------------------- itr No: {itr} ------------------ \n")
-        logging.debug(f" Global Model Sparsity: {mlp_model_sps(model)} \n")
+        logging.debug(f" Global Model Sparsity: {model_sps(model)} \n")
 
 
 
@@ -185,3 +162,24 @@ def gsp(model, itr, sps):
         logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
                         (gsp_vec.sparsity(reshaped_w4), gsp_vec.sparsity(model.fc2.weight.detach())))
 # ===================================== GSP FUNCTION ===========================================
+
+def var_GSP(model, itr, sps):
+    weight_d = {}
+    shape_list = []
+
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape_list.append(param.data.shape)
+            weight_d[counter] = param.detach().view(-1)
+            counter += 1
+    
+    sps_weight = gs_projection(weight_d, sps)
+    
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape = shape_list[counter]
+            param.data = sps_weight[counter].view(shape).requires_grad_(True)
+            counter += 1
+
