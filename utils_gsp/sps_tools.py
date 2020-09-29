@@ -73,7 +73,7 @@ def layer_wise_sps(arg):
     print("Layer 1 Sparsity w1: %.2f \n" % (sparsity(reshaped_w1)))
     print("Layer 2 Sparsity w2: %.2f \n" % (sparsity(reshaped_w2)))
     print("Layer 3 Sparsity w3: %.2f \n" % (sparsity(reshaped_w3)))
-    print("Layer 4 Sparsity w4: %.2f \n" % (ssparsity(reshaped_w4)))
+    print("Layer 4 Sparsity w4: %.2f \n" % (sparsity(reshaped_w4)))
 
 def get_cnn_layer_shape(model):
     counter = 0
@@ -81,9 +81,6 @@ def get_cnn_layer_shape(model):
         if 'weight' in name:
             print(f"Paramater Shape: {param.shape}")
             counter += 0
-
-def get_saved_model_sps(PATH):
-
 
 def cnn_model_sps(model):
     w1 = model.conv1.weight.detach()

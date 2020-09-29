@@ -19,14 +19,24 @@ import scipy.io
 from matplotlib import pyplot as plt
 import logging
 
-from utils.helper import *
-
-import utils.vec_projection as gsp_vec
+import sys
+sys.path.append("../")
+from utils_gsp.helper import *
+import utils_gsp.vec_projection as gsp_vec
 # import utils.torch_projection as gsp_reg
-import utils.var_projection as gsp_reg
-import utils.gpu_projection as gsp_gpu
-import utils.padded_gsp as gsp_model
-import utils.sps_tools as sps_tools
+import utils_gsp.var_projection as gsp_reg
+import utils_gsp.gpu_projection as gsp_gpu
+import utils_gsp.padded_gsp as gsp_model
+import utils_gsp.sps_tools as sps_tools
+
+
+# from utils.helper import *
+# import utils.vec_projection as gsp_vec
+# # import utils.torch_projection as gsp_reg
+# import utils.var_projection as gsp_reg
+# import utils.gpu_projection as gsp_gpu
+# import utils.padded_gsp as gsp_model
+# import utils.sps_tools as sps_tools
 
 
 
@@ -195,7 +205,7 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/gsp_model.pth') 
+torch.save(model.state_dict(), 'saves/gsp_model_delete_this.pth') 
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)
