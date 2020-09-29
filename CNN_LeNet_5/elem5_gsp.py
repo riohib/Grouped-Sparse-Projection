@@ -10,33 +10,22 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from net.models import LeNet_5 as LeNet
-import util
-
 import time
 import scipy.io
-
 from matplotlib import pyplot as plt
 import logging
 
+
+from net.models import LeNet_5 as LeNet
+import util
+
 import sys
 sys.path.append("../")
-from utils_gsp.helper import *
 import utils_gsp.vec_projection as gsp_vec
-# import utils.torch_projection as gsp_reg
 import utils_gsp.var_projection as gsp_reg
 import utils_gsp.gpu_projection as gsp_gpu
 import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
-
-
-# from utils.helper import *
-# import utils.vec_projection as gsp_vec
-# # import utils.torch_projection as gsp_reg
-# import utils.var_projection as gsp_reg
-# import utils.gpu_projection as gsp_gpu
-# import utils.padded_gsp as gsp_model
-# import utils.sps_tools as sps_tools
 
 
 
@@ -133,7 +122,7 @@ def train(epochs, decay=0, threshold=0.0):
             if (itr % gsp_interval == 0) and args.gsp == 'pre':
                 # sps_tools.global_gsp(model, itr, sps)
                 gsp_reg.groupedsparseproj(model, itr, sps)
-                # print("GSP-Pre-ing: itr:  " + str(itr))
+                print("GSP-Pre-ing: itr:  " + str(itr))
 
             output = model(data)
             loss = F.nll_loss(output, target)
@@ -205,7 +194,7 @@ print("--- Initial training ---")
 train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/S'+ str(args.sps)+'/S'+ str(args.sps)+'_3_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/gsp_model_delete_this.pth') 
+torch.save(model.state_dict(), 'saves/gsp_model_2.pth') 
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)

@@ -16,15 +16,13 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 
-import utils.torch_projection as gsp_reg
-import utils.vec_projection as gsp_vec
-
 np.random.seed(0)
 torch.manual_seed(0)
 
 #************************* Imports *************************
 
 logging.basicConfig(filename='LogFile.log', level=logging.DEBUG)
+
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

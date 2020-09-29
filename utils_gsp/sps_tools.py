@@ -12,15 +12,17 @@ from operator import mul
 
 from net.models import LeNet_5 as LeNet
 import util
-import utils.vec_projection as gsp_vec
-# import utils.torch_projection as gsp_reg
-import utils.var_projection as gsp_reg
-import utils.gpu_projection as gsp_gpu
-import utils.padded_gsp as gsp_model
+
+import sys
+sys.path.append('../')
+import utils_gsp.padded_gsp as gsp_model
 
 
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 
+# Select Device
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else 'cpu')
 
 #======================================================================================================
 #====================================== Sparsity Calculator ===========================================
@@ -94,8 +96,8 @@ def cnn_model_sps(model):
     reshaped_w4 = w4.view(500,-1)
     
     tot_weight = torch.cat([reshaped_w1,reshaped_w2,reshaped_w3,reshaped_w4], dim=1)
-    print("Total Model Sparsity w1: %.2f \n" % (gsp_vec.sparsity(tot_weight)))
-    return gsp_vec.sparsity(tot_weight)
+    print("Total Model Sparsity w1: %.2f \n" % (sparsity(tot_weight)))
+    return sparsity(tot_weight)
 
 def cnn_layer_Ploter(model, title):
     subRow = 4
@@ -139,13 +141,6 @@ def cnn_dict_to_model(model, out_dict):
             # print(f"out-shape: {out_dict[index].shape}")
             param.data = out_dict[index].view(layer_shape)
             index += 1
-
-#=====================================================================================================
-## Select which GSP Function to use:
-# gs_projection = gsp_reg.groupedsparseproj
-# gs_projection = gsp_vec.groupedsparseproj
-# gs_projection = gsp_gpu.groupedsparseproj
-#=====================================================================================================
 
 def global_gsp(model, itr, sps):
     params_d = {}
@@ -221,13 +216,13 @@ def gsp(model, itr, sps):
     if itr % 600 == 0:
         logging.debug(" ------------------- itr No: %s ------------------ \n" % itr)
         logging.debug("Layer 1 Sparsity w1 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(reshaped_w1), gsp_vec.sparsity(model.conv1.weight.detach().view(20,25))))
+                        (sparsity(reshaped_w1), sparsity(model.conv1.weight.detach().view(20,25))))
         logging.debug("Layer 2 Sparsity w2 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(reshaped_w2), gsp_vec.sparsity(model.conv2.weight.detach().view(250,100))))
+                        (sparsity(reshaped_w2), sparsity(model.conv2.weight.detach().view(250,100))))
         logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(reshaped_w3), gsp_vec.sparsity(model.fc1.weight.detach())))
+                        (sparsity(reshaped_w3), sparsity(model.fc1.weight.detach())))
         logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
-                        (gsp_vec.sparsity(reshaped_w4), gsp_vec.sparsity(model.fc2.weight.detach())))
+                        (sparsity(reshaped_w4), sparsity(model.fc2.weight.detach())))
 # ===================================== GSP FUNCTION ===========================================
 
 def var_GSP(model, itr, sps):
