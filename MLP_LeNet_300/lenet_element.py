@@ -30,8 +30,6 @@ import utils_gsp.gpu_projection as gsp_gpu
 import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
 
-
-
 os.makedirs('saves', exist_ok=True)
 
 # Training settings
@@ -91,6 +89,7 @@ test_loader = torch.utils.data.DataLoader(
     datasets.MNIST('data', train=False, transform=transforms.Compose([
                        transforms.ToTensor()])),
     batch_size=args.test_batch_size, shuffle=False, **kwargs)
+
 
 #==============================================================================================
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
