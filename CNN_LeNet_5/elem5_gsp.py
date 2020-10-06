@@ -110,7 +110,7 @@ def train(epochs, decay=0, threshold=0.0):
     itr=0
     model.train()
     pbar = tqdm(range(epochs), total=epochs)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
     curves = np.zeros((epochs,14))
     
     for epoch in pbar:

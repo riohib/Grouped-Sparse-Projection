@@ -169,7 +169,8 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     vgmu, xp_mat, gradg = gmu(pos_matrix, xp_mat, 0, ni_tensor, inv_mask)
 
 #----------------------------------------------------------------------------------------
-    if vgmu < k or abs(vgmu-k) < 1e-15:
+    # if vgmu < k or abs(vgmu-k) < 1e-15:
+    if vgmu < k:     
         xp_mat = matrix
         gxpmu = vgmu
         numiter = 0

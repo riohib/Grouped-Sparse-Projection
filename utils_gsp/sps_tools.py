@@ -35,7 +35,11 @@ def sparsity(matrix):
     spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
     if len(zero_col_ind) != 0:
         spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
-    sps_avg =  spx_c.sum() / matrix.shape[1]
+    
+    if matrix.dim() > 1:   
+        sps_avg =  spx_c.sum() / matrix.shape[1]
+    elif matrix.dim() == 1:  # If not a matrix but a column vector!
+        sps_avg =  spx_c    
     return sps_avg
 
 def sparsity_dict(in_dict):
@@ -119,9 +123,9 @@ def cnn_layer_Ploter(model, title):
     fig.colorbar(im, cax=cbar_ax)
 
 ## ====================================================================== ##
-## =============== Helper Functions for Global GSP with pad ============= ##
+## =========== CNN: Helper Functions for Global GSP with pad ============ ##
 ## ====================================================================== ##
-def cnn_make_dict(model):
+def make_weight_dict(model):
     in_dict = {}
     counter = 0
     for name, param in model.named_parameters(): 
@@ -130,7 +134,7 @@ def cnn_make_dict(model):
             counter += 1
     return in_dict
 
-def cnn_dict_to_model(model, out_dict):
+def dict_to_model(model, out_dict):
     param_d = {}
     index = 0
     for name, param in model.named_parameters(): 
@@ -141,7 +145,25 @@ def cnn_dict_to_model(model, out_dict):
             # print(f"out-shape: {out_dict[index].shape}")
             param.data = out_dict[index].view(layer_shape)
             index += 1
+## ====================================================================== ##
+## =========== MLP: Helper Functions for Global GSP with pad ============ ##
+## ====================================================================== ##
 
+# def cnn_dict_to_model(model, out_dict):
+#     param_d = {}
+#     index = 0
+#     for name, param in model.named_parameters(): 
+#         if 'weight' in name:
+#             layer_shape = param.shape
+#             param_d[index] = param
+#             # print(layer_shape)
+#             # print(f"out-shape: {out_dict[index].shape}")
+#             param.data = out_dict[index].view(layer_shape)
+#             index += 1
+
+
+
+## ====================================================================== ##
 def global_gsp(model, itr, sps):
     params_d = {}
     weight_d = {}
@@ -249,8 +271,7 @@ def var_GSP(model, itr, sps):
 # ===================================== GSP FUNCTION ===========================================
 def gsp_model_apply(model, sps):
     ## Global Model Projection
-
-    in_dict = cnn_make_dict(model)
+    in_dict = make_weight_dict(model)
     
     try:
         X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
@@ -260,4 +281,4 @@ def gsp_model_apply(model, sps):
     out_dict = gsp_model.unpad_output_mat(X, ni_list)
 
     # Put Dict back into model
-    cnn_dict_to_model(model, out_dict)
+    dict_to_model(model, out_dict)
