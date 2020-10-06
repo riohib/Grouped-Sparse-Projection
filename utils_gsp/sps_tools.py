@@ -56,31 +56,21 @@ def sparsity_dict(in_dict):
             spxList.append(spx)
         spx = sum(spxList) / r
     return spx
+
+def model_weight_sps(model):
+    gsp_param_dict = {}
+    sps_list = []
+    ind = 0
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            gsp_param_dict[ind] = param.detach()
+            sps_list.append(sparsity(gsp_param_dict[ind]))
+            ind += 1
+    print(sps_list)
+
+
 #=====================================================================================================
-
-def layer_wise_sps(arg):
-    if isinstance(arg, LeNet):
-        model = arg
-    elif isinstance(arg, str):
-        PATH = arg
-        model = LeNet(mask=False).to(device)
-        model.load_state_dict(torch.load(PATH,map_location=device) )
-
-    w1 = model.conv1.weight.detach()
-    w2 = model.conv2.weight.detach()
-    w3 = model.fc1.weight.detach()
-    w4 = model.fc2.weight.detach()
-
-    reshaped_w1 = w1.view(20,25)
-    reshaped_w2 = w2.view(250, 100)
-    reshaped_w3 = w3
-    reshaped_w4 = w4
-
-    print("Layer 1 Sparsity w1: %.2f \n" % (sparsity(reshaped_w1)))
-    print("Layer 2 Sparsity w2: %.2f \n" % (sparsity(reshaped_w2)))
-    print("Layer 3 Sparsity w3: %.2f \n" % (sparsity(reshaped_w3)))
-    print("Layer 4 Sparsity w4: %.2f \n" % (sparsity(reshaped_w4)))
-
+#=====================================================================================================
 def get_cnn_layer_shape(model):
     counter = 0
     for name, param in model.named_parameters(): 
@@ -145,23 +135,6 @@ def dict_to_model(model, out_dict):
             # print(f"out-shape: {out_dict[index].shape}")
             param.data = out_dict[index].view(layer_shape)
             index += 1
-## ====================================================================== ##
-## =========== MLP: Helper Functions for Global GSP with pad ============ ##
-## ====================================================================== ##
-
-# def cnn_dict_to_model(model, out_dict):
-#     param_d = {}
-#     index = 0
-#     for name, param in model.named_parameters(): 
-#         if 'weight' in name:
-#             layer_shape = param.shape
-#             param_d[index] = param
-#             # print(layer_shape)
-#             # print(f"out-shape: {out_dict[index].shape}")
-#             param.data = out_dict[index].view(layer_shape)
-#             index += 1
-
-
 
 ## ====================================================================== ##
 def global_gsp(model, itr, sps):
@@ -204,47 +177,11 @@ def global_gsp(model, itr, sps):
             param.data = sparse_g_weights[:, start:end].clone().requires_grad_(True).view(param.shape)
             
             i += 1
-    
+
     if itr % 600 == 0:
         logging.debug(f" ------------------- itr No: {itr} ------------------ \n")
         logging.debug(f" Global Model Sparsity: {model_sps(model)} \n")
 
-
-
-#=====================================================================================================
-#=====================================================================================================
-def gsp(model, itr, sps):
-
-    w1 = model.conv1.weight.detach()
-    w2 = model.conv2.weight.detach()
-    w3 = model.fc1.weight.detach()
-    w4 = model.fc2.weight.detach()
-
-    reshaped_w1 = w1.view(20,25)
-    reshaped_w2 = w2.view(250, 100)
-    reshaped_w3 = w3
-    reshaped_w4 = w4
-
-    sparse_w1 = gs_projection(reshaped_w1, 0.91)
-    sparse_w2 = gs_projection(reshaped_w2, 0.85)
-    sparse_w3 = gs_projection(reshaped_w3, 0.72)
-    sparse_w4 = gs_projection(reshaped_w4, 0.33)
-    
-    model.conv1.weight.data = sparse_w1.clone().requires_grad_(True).view(20,1,5,5)
-    model.conv2.weight.data = sparse_w2.clone().requires_grad_(True).view(50,20,5,5)
-    model.fc1.weight.data = sparse_w3.clone().requires_grad_(True)
-    model.fc2.weight.data = sparse_w4.clone().requires_grad_(True)
-
-    if itr % 600 == 0:
-        logging.debug(" ------------------- itr No: %s ------------------ \n" % itr)
-        logging.debug("Layer 1 Sparsity w1 | before: %.2f | After: %.2f \n" % 
-                        (sparsity(reshaped_w1), sparsity(model.conv1.weight.detach().view(20,25))))
-        logging.debug("Layer 2 Sparsity w2 | before: %.2f | After: %.2f \n" % 
-                        (sparsity(reshaped_w2), sparsity(model.conv2.weight.detach().view(250,100))))
-        logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
-                        (sparsity(reshaped_w3), sparsity(model.fc1.weight.detach())))
-        logging.debug("Layer 3 Sparsity w3 | before: %.2f | After: %.2f \n" % 
-                        (sparsity(reshaped_w4), sparsity(model.fc2.weight.detach())))
 # ===================================== GSP FUNCTION ===========================================
 
 def var_GSP(model, itr, sps):
@@ -257,9 +194,7 @@ def var_GSP(model, itr, sps):
             shape_list.append(param.data.shape)
             weight_d[counter] = param.detach().view(-1)
             counter += 1
-    
-    sps_weight = gs_projection(weight_d, sps)
-    
+    sps_weight = gs_projection(weight_d, sps)    
     counter = 0
     for name, param in model.named_parameters(): 
         if 'weight' in name:
@@ -273,10 +208,11 @@ def gsp_model_apply(model, sps):
     ## Global Model Projection
     in_dict = make_weight_dict(model)
     
-    try:
-        X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
-    except:
-        import pdb; pdb.set_trace()
+    # try:
+    #     X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
+    # except:
+    #     import pdb; pdb.set_trace()
+    X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
 
     out_dict = gsp_model.unpad_output_mat(X, ni_list)
 

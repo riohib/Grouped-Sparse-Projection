@@ -20,7 +20,7 @@ import scipy.io
 from matplotlib import pyplot as plt
 import logging
 
-from utils.helper import *
+# from utils.helper import *
 
 import sys
 sys.path.append("../")
@@ -118,7 +118,7 @@ optimizer = optim.Adam(model.parameters(), lr=args.lr)
 initial_optimizer_state_dict = optimizer.state_dict()
 
 num_prefetch = 200
-train_loader_1 = prefetch_dataloader(train_loader, num_prefetch)
+# train_loader_1 = prefetch_dataloader(train_loader, num_prefetch)
  
 
 def train(epochs, decay=0, threshold=0.0):
@@ -199,7 +199,7 @@ train(args.epochs, decay=args.decay, threshold=0.0)
 accuracy = test()
 # torch.save(model.state_dict(), 'saves/F97_1_elt_'+str(args.decay)+'_'+str(args.reg_type)+'_'+str(args.gsp)+'.pth')
 # torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'/'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/Global_gsp'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
+torch.save(model.state_dict(), 'saves/new_total_sps/total_sps'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)
