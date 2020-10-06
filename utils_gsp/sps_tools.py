@@ -56,7 +56,7 @@ def sparsity_dict(in_dict):
             spxList.append(spx)
         spx = sum(spxList) / r
     return spx
-
+  
 def model_weight_sps(model):
     gsp_param_dict = {}
     sps_list = []
