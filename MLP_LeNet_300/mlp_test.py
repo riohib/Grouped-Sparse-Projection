@@ -38,7 +38,8 @@ device = torch.device("cuda" if use_cuda else 'cpu')
 # Load Model
 
 model = LeNet(mask=False).to(device)
-gspm_path = './saves/S0.97/0.97_0_pre.pth'
+gspm_path = './saves/new_total_sps/total_sps0.97_2_post.pth'
+# gspm_path = './saves/elt_0.0_0.pth'     
 
 model.load_state_dict(torch.load(gspm_path,  map_location=device)) 
 

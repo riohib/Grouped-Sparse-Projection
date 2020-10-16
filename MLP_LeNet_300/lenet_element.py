@@ -96,13 +96,13 @@ logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 ## Select which GSP Function to use:
 # gs_projection = gsp_reg.groupedsparseproj
 
-if args.device == 'gpu':
-    gs_projection = gsp_gpu.groupedsparseproj
-    print("gpu")
-else:
-    gs_projection = gsp_vec.groupedsparseproj
+# if args.device == 'gpu':
+#     gs_projection = gsp_gpu.groupedsparseproj
+#     print("gpu")
+# else:
+#     gs_projection = gsp_vec.groupedsparseproj
 
-gsp_interval = 20; sps= args.sps
+gsp_interval = 50; sps= args.sps
 
 # ===================================== GSP FUNCTION ===========================================
 
@@ -116,7 +116,7 @@ util.print_model_parameters(model)
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
 initial_optimizer_state_dict = optimizer.state_dict()
 
-num_prefetch = 200
+# num_prefetch = 200
 # train_loader_1 = prefetch_dataloader(train_loader, num_prefetch)
  
 
