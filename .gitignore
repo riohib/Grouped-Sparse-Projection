@@ -8,7 +8,7 @@ cnn_lenet_5/old_LeNet5.py
 /mlp_lenet_300/gsp_models_trained
 
 cifar/data/
-/cifer/test_resnet110.py
+
 
 .vscode/settings.json
 
@@ -31,6 +31,7 @@ cifar/data/
 *.png
 *.ipynb
 
+
 models.py
 prune.py
 quantization.py
@@ -40,3 +41,4 @@ main.py
 projection.py
 readme
 huffmancoding.py
+cifar/test_resnet110.py
