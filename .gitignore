@@ -8,7 +8,7 @@ cnn_lenet_5/old_LeNet5.py
 /mlp_lenet_300/gsp_models_trained
 
 cifar/data/
-cifer/test_resnet110.py
+/cifer/test_resnet110.py
 
 .vscode/settings.json
 
