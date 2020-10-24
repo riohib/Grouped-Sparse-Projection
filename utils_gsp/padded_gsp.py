@@ -250,7 +250,7 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
     alpha = torch.diag(torch.matmul(xp_mat.T, pos_matrix))
     xp_mat = alpha * (xp_mat * matrix_sign)
     # -------------------------------------------
-
+ 
     return xp_mat, ni_list
 
 

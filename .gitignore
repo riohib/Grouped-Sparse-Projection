@@ -1,11 +1,13 @@
-CNN_LeNet_5/__pycache__
-CNN_LeNet_5/data
-CNN_LeNet_5/old_LeNet5.py
+cnn_lenet_5/__pycache__
+cnn_lenet_5/data
+cnn_lenet_5/old_LeNet5.py
 
-/MLP_LeNet_300/__pycache__
-/MLP_LeNet_300/archived
-/MLP_LeNet_300/data
-/MLP_LeNet_300/gsp_models_trained
+/mlp_lenet_300/__pycache__
+/mlp_lenet_300/archived
+/mlp_lenet_300/data
+/mlp_lenet_300/gsp_models_trained
+
+cifar/data/
 
 .vscode/settings.json
 
@@ -22,6 +24,11 @@ CNN_LeNet_5/old_LeNet5.py
 *.pt
 *.gz
 *.pkl
+*.tar
+*.meta
+*.html
+*.png
+*.ipynb
 
 models.py
 prune.py

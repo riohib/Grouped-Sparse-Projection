@@ -10,12 +10,13 @@ from math import gcd
 from functools import reduce
 from operator import mul
 
-from net.models import LeNet_5 as LeNet
+# from net.models import LeNet_5 as LeNet
 import util
 
 import sys
 sys.path.append('../')
 import utils_gsp.padded_gsp as gsp_model
+import utils_gsp.gpu_projection as gsp_gpu
 
 
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
@@ -71,6 +72,45 @@ def model_weight_sps(model):
 
 #=====================================================================================================
 #=====================================================================================================
+
+def apply_gsp(model, sps, gsp_func = gsp_gpu):
+    """
+    This function is for applying GSP layer-wise in a CNN or MLP or Resnet network in this repo.
+    The GSP is applied layer-wise separately.
+    """
+    weight_d = {}
+    shape_list = []
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape_list.append(param.data.shape)    
+            if param.dim() > 2:  #Only two different dimension for LeNet-5
+                w_shape = param.shape
+                weight_d[counter] = param.detach().view(50,-1)
+                param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+            else:
+                param.data = gsp_func.groupedsparseproj(param.detach(), sps)
+            counter += 1
+
+
+def get_layerwise_sps(model):
+    counter = 0
+    weight_d = {}
+    sps_list = []
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            # shape_list.append(param.data.shape)
+            if param.dim() > 2:  #Only two different dimension for LeNet-5
+                weight_d[counter] = param.detach().view(50,-1)
+                sps_list.append(sparsity(weight_d[counter])) 
+            else:
+                sps_list.append(sparsity(param.data)) 
+            counter += 1
+
+    print(f"Layerwise sps: L1: {sps_list[0]:.4f} | L2: {sps_list[1]:.4f} | \
+        L3: {sps_list[2]:.4f} | L4: {sps_list[3]:.4f}")
+    return sps_list
+
 def get_cnn_layer_shape(model):
     counter = 0
     for name, param in model.named_parameters(): 
@@ -78,20 +118,20 @@ def get_cnn_layer_shape(model):
             print(f"Paramater Shape: {param.shape}")
             counter += 0
 
-def cnn_model_sps(model):
-    w1 = model.conv1.weight.detach()
-    w2 = model.conv2.weight.detach()
-    w3 = model.fc1.weight.detach()
-    w4 = model.fc2.weight.detach()
+# def cnn_model_sps(model):
+#     w1 = model.conv1.weight.detach()
+#     w2 = model.conv2.weight.detach()
+#     w3 = model.fc1.weight.detach()
+#     w4 = model.fc2.weight.detach()
 
-    reshaped_w1 = w1.view(500,-1)
-    reshaped_w2 = w2.view(500,-1)
-    reshaped_w3 = w3.view(500,-1)
-    reshaped_w4 = w4.view(500,-1)
+#     reshaped_w1 = w1.view(500,-1)
+#     reshaped_w2 = w2.view(500,-1)
+#     reshaped_w3 = w3.view(500,-1)
+#     reshaped_w4 = w4.view(500,-1)
     
-    tot_weight = torch.cat([reshaped_w1,reshaped_w2,reshaped_w3,reshaped_w4], dim=1)
-    print("Total Model Sparsity w1: %.2f \n" % (sparsity(tot_weight)))
-    return sparsity(tot_weight)
+#     tot_weight = torch.cat([reshaped_w1,reshaped_w2,reshaped_w3,reshaped_w4], dim=1)
+#     print("Total Model Sparsity w1: %.2f \n" % (sparsity(tot_weight)))
+#     return sparsity(tot_weight)
 
 def cnn_layer_Ploter(model, title):
     subRow = 4
@@ -182,8 +222,8 @@ def global_gsp(model, itr, sps):
         logging.debug(f" ------------------- itr No: {itr} ------------------ \n")
         logging.debug(f" Global Model Sparsity: {model_sps(model)} \n")
 
-# ===================================== GSP FUNCTION ===========================================
 
+# ===================================== GSP FUNCTION ===========================================
 def var_GSP(model, itr, sps):
     weight_d = {}
     shape_list = []
@@ -207,14 +247,53 @@ def var_GSP(model, itr, sps):
 def gsp_model_apply(model, sps):
     ## Global Model Projection
     in_dict = make_weight_dict(model)
-    
     # try:
     #     X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
     # except:
     #     import pdb; pdb.set_trace()
     X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
-
     out_dict = gsp_model.unpad_output_mat(X, ni_list)
 
     # Put Dict back into model
     dict_to_model(model, out_dict)
+
+
+
+# ===================================== GSP-Resnet ===========================================
+def gsp_resnet(model, sps=0.95, gsp_func = gsp_gpu):
+    """
+    This function is for applying GSP layer-wise in a ResNet network in this repo.
+    The GSP is applied layer-wise separately.  
+    """
+    params_d = {}
+    weight_d = {}
+    shape_list = []
+    counter = 0
+    for name, param in model.named_parameters(): 
+        params_d[name] = param
+
+        if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+            shape_list.append(param.data.shape)
+            weight_d[name] = param  
+
+            # qq = [x for x in weight_d.keys()]  
+            # if param.dim() > 2:  #Only two different dimension for LeNet-5
+            w_shape = param.shape
+            weight_d[counter] = param.detach().view(16,-1)
+            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+            # else:
+            #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
+            # counter += 1
+
+def resnet_layerwise_sps(model):
+    counter = 0
+    weight_d = {}
+    sps_list = []
+    for name, param in model.named_parameters(): 
+        # if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+        if 'weight' in name:
+            weight_d[counter] = param.detach().view(16,-1)
+            sps_list.append(sparsity(weight_d[counter])) 
+    
+    qq = [x for x in sps_list] 
+    return sps_list
