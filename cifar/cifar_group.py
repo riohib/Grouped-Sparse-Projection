@@ -112,7 +112,7 @@ if use_cuda:
     torch.cuda.manual_seed_all(args.manualSeed)
 
 best_acc = 0  # best test accuracy
-save_path = os.path.join('./results', str(args.arch)+'_'+ 'gsp' +'_'+str(args.reg), datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'gsp' +str(args.sps)+'_', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 else:
@@ -293,7 +293,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, d
         
         # sparse-projection
         if (itr % 200 == 0): #gsp every 200 iteration
-            print("GSP-Post-ing: itr:  " + str(itr))
+            print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
             sps_tools.gsp_resnet(model, args.sps, gsp_func = gsp_gpu)
         itr+=1
 

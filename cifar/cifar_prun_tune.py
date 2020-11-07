@@ -109,7 +109,7 @@ if use_cuda:
     torch.cuda.manual_seed_all(args.manualSeed)
 
 best_acc = 0  # best test accuracy
-save_path = os.path.join(args.resume, 'finetune', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+save_path = os.path.join(args.resume, 'finetune', 's'+ f"{args.sensitivity:.2e}-" + datetime.now().strftime('%m-%d_%H-%M-%S'))
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 else:
@@ -218,7 +218,6 @@ def main():
     
     if args.evaluate:
         return
-
 
     best_prec1 = test_acc
     torch.save(model.state_dict(), os.path.join(save_path, 'finetuned.pth'))
@@ -337,7 +336,7 @@ def test(testloader, model, criterion, epoch, use_cuda):
 
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
-            inputs, targets = torch.autograd.Variable(inputs, volatile=True), torch.autograd.Variable(targets)
+            inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
             # compute output
             outputs = model(inputs)
