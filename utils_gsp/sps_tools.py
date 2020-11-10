@@ -311,7 +311,6 @@ def gsp_resnet_total(model, sps=0.95, gsp_func = gsp_gpu):
             #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
             # counter += 1
 
-
 def resnet_layerwise_sps(model):
     counter = 0
     weight_d = {}
@@ -321,7 +320,6 @@ def resnet_layerwise_sps(model):
         if 'weight' in name:
             weight_d[counter] = param.detach().view(16,-1)
             sps_list.append(sparsity(weight_d[counter])) 
-    
     qq = [x for x in sps_list]
     return sps_list
 
