@@ -112,7 +112,8 @@ if use_cuda:
     torch.cuda.manual_seed_all(args.manualSeed)
 
 best_acc = 0  # best test accuracy
-save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'gsp' +str(args.sps)+'_', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+# save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'gsp' +str(args.sps)+'_', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'total-model' +'_gsp-' + str(args.sps))
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 else:
@@ -196,7 +197,7 @@ def main():
     checkpoint = torch.load(os.path.join(args.resume, args.model+'.pth.tar'))
     model.load_state_dict(checkpoint['state_dict'])
     logger = Logger(os.path.join(save_path, 'log.txt'), title=title)
-    logger.set_names(['Learning Rate', 'Train Loss', 'Valid Loss', 'Train Acc.', 'Valid Acc.', 'Reg'])
+    logger.set_names(['Learning Rate', 'Train Loss', 'Valid Loss', 'Train Acc.', 'Valid Acc.'])
     print('model loaded')
 
 
@@ -213,11 +214,11 @@ def main():
 
         print('\nEpoch: [%d | %d] LR: %f' % (epoch + 1, args.epochs, state['lr']))
 
-        train_loss, train_acc, reg = train(trainloader, model, criterion, optimizer, epoch, use_cuda, args.reg, args.decay)
+        train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, use_cuda, args.decay)
         test_loss, test_acc = test(testloader, model, criterion, epoch, use_cuda)
 
         # append logger file
-        logger.append([state['lr'], train_loss, test_loss, train_acc, test_acc, reg])
+        logger.append([state['lr'], train_loss, test_loss, train_acc, test_acc])
 
         # save model
         is_best = test_acc > best_acc
@@ -231,7 +232,7 @@ def main():
     print('Best acc:')
     print(best_acc)
 
-def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, decay):
+def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
     # switch to train mode
     model.train()
 
@@ -255,30 +256,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, d
         # compute output
         outputs = model(inputs)
         loss = criterion(outputs, targets)
-
-        # applying sparsity-inducing regularizers
-        reg = 0.0
-        if decay:
-            for name, param in model.named_parameters():
-                if param.requires_grad and len(list(param.size()))==4 and 'weight' in name and torch.sum(torch.abs(param))>0:
-                    if reg_type==1:    
-                        reg += torch.sum(torch.sqrt(torch.sum(param**2,(0,2,3))))+torch.sum(torch.sqrt(torch.sum(param**2,(1,2,3))))
-                    elif reg_type==2:
-                        reg += (torch.sum(torch.sqrt(torch.sum(param**2,(0,2,3))))+torch.sum(torch.sqrt(torch.sum(param**2,(1,2,3)))))/torch.sqrt(torch.sum(param**2))
-                    elif reg_type==3:
-                        reg += ( (torch.sum(torch.sqrt(torch.sum(param**2,(0,2,3))))**2) + (torch.sum(torch.sqrt(torch.sum(param**2,(1,2,3))))**2) )/torch.sum(param**2)    
-                    else:
-                        reg = 0.0
-                elif param.requires_grad and len(list(param.size()))==2 and 'weight' in name and torch.sum(torch.abs(param))>0:
-                    if reg_type==1:    
-                        reg += torch.sum(torch.sqrt(torch.sum(param**2,0)))+torch.sum(torch.sqrt(torch.sum(param**2,1)))
-                    elif reg_type==2:
-                        reg += (torch.sum(torch.sqrt(torch.sum(param**2,0)))+torch.sum(torch.sqrt(torch.sum(param**2,1))))/torch.sqrt(torch.sum(param**2))
-                    elif reg_type==3:
-                        reg += ( (torch.sum(torch.sqrt(torch.sum(param**2,0)))**2) + (torch.sum(torch.sqrt(torch.sum(param**2,1)))**2) )/torch.sum(param**2)    
-                    else:
-                        reg = 0.0         
-        total_loss = loss #+ decay*reg
+        total_loss = loss
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs.data, targets.data, topk=(1, 5))
@@ -294,7 +272,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, d
         # sparse-projection
         if (itr % 200 == 0): #gsp every 200 iteration
             print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
-            sps_tools.gsp_resnet(model, args.sps, gsp_func = gsp_gpu)
+            sps_tools.gsp_resnet_total(model, args.sps, gsp_func = gsp_gpu)
         itr+=1
 
         # measure elapsed time
@@ -302,7 +280,8 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, d
         end = time.time()
 
         # plot progress
-        bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Reg: {reg:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
+        # bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Reg: {reg:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
+        bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
                     batch=batch_idx + 1,
                     size=len(trainloader),
                     data=data_time.avg,
@@ -310,13 +289,12 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, reg_type, d
                     total=bar.elapsed_td,
                     eta=bar.eta_td,
                     loss=losses.avg,
-                    reg=reg,
                     top1=top1.avg,
                     top5=top5.avg,
                     )
         bar.next()
     bar.finish()
-    return (losses.avg, top1.avg, reg)
+    return (losses.avg, top1.avg)
 
 def test(testloader, model, criterion, epoch, use_cuda):
     global best_acc

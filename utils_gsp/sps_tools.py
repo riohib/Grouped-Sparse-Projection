@@ -260,7 +260,7 @@ def gsp_model_apply(model, sps):
 
 
 # ===================================== GSP-Resnet ===========================================
-def gsp_resnet(model, sps=0.95, gsp_func = gsp_gpu):
+def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     """
     This function is for applying GSP layer-wise in a ResNet network in this repo.
     The GSP is applied layer-wise separately.  
@@ -285,6 +285,33 @@ def gsp_resnet(model, sps=0.95, gsp_func = gsp_gpu):
             #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
             # counter += 1
 
+
+def gsp_resnet_total(model, sps=0.95, gsp_func = gsp_gpu):
+    """
+    This function is for applying GSP layer-wise in a ResNet network in this repo.
+    The GSP is applied layer-wise separately.  
+    """
+    params_d = {}
+    weight_d = {}
+    shape_list = []
+    counter = 0
+    for name, param in model.named_parameters(): 
+        params_d[name] = param
+
+        if 'weight' in name and 'module.conv1' not in name and 'downsample' not in name and 'fc' not in name:
+            shape_list.append(param.data.shape)
+            weight_d[name] = param  
+
+            # qq = [x for x in weight_d.keys()]  
+            # if param.dim() > 2:  #Only two different dimension for LeNet-5
+            w_shape = param.shape
+            weight_d[counter] = param.detach().view(16,-1)
+            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+            # else:
+            #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
+            # counter += 1
+
+
 def resnet_layerwise_sps(model):
     counter = 0
     weight_d = {}
@@ -295,5 +322,12 @@ def resnet_layerwise_sps(model):
             weight_d[counter] = param.detach().view(16,-1)
             sps_list.append(sparsity(weight_d[counter])) 
     
-    qq = [x for x in sps_list] 
+    qq = [x for x in sps_list]
     return sps_list
+
+def resnet_layer_names(model):
+    layer_name = []
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            layer_name.append(name)
+    return layer_name
