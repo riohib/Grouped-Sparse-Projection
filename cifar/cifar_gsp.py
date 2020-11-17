@@ -91,7 +91,9 @@ parser.add_argument('--gpu-id', default='0', type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
 # GSP options
 parser.add_argument('--sps', type=float, default=0.96, metavar='SPS',
-                    help='gsp sparsity value (default: 0.95)')  
+                    help='gsp sparsity value (default: 0.95)')
+parser.add_argument('--savetag', type=str, default='', metavar='SPS',
+                    help='saving folder tag')                        
 
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
@@ -113,7 +115,7 @@ if use_cuda:
 
 best_acc = 0  # best test accuracy
 # save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'gsp' +str(args.sps)+'_', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'total-model' +'_gsp-' + str(args.sps))
+save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_' + args.savetag + '_gsp-all_' +str(args.sps)+'_', datetime.now().strftime('%m-%d_%H-%M'))
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 else:
@@ -272,7 +274,8 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
         # sparse-projection
         if (itr % 200 == 0): #gsp every 200 iteration
             print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
-            sps_tools.gsp_resnet_total(model, args.sps, gsp_func = gsp_gpu)
+            # sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu)
+            sps_tools.gsp_global_apply(model, args.sps, 'resnet-not-bn')
         itr+=1
 
         # measure elapsed time

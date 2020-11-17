@@ -30,7 +30,7 @@ cifar/data/
 *.html
 *.png
 *.ipynb
-
+*.pickle
 
 models.py
 prune.py

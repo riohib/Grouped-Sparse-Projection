@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import statistics
 import logging
+import pickle
 
 from math import gcd
 from functools import reduce
@@ -15,7 +16,7 @@ import util
 
 import sys
 sys.path.append('../')
-import utils_gsp.padded_gsp as gsp_model
+import utils_gsp.padded_gsp as gsp_global
 import utils_gsp.gpu_projection as gsp_gpu
 
 
@@ -153,28 +154,59 @@ def cnn_layer_Ploter(model, title):
     fig.colorbar(im, cax=cbar_ax)
 
 ## ====================================================================== ##
-## =========== CNN: Helper Functions for Global GSP with pad ============ ##
+## =========== Helper Functions for Global GSP with pad ================= ##
 ## ====================================================================== ##
-def make_weight_dict(model):
+def make_weight_dict(model, arch):
     in_dict = {}
     counter = 0
-    for name, param in model.named_parameters(): 
-        if 'weight' in name:
-            in_dict[counter] = param.detach().view(-1)
-            counter += 1
+    if arch == 'cnn':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name:
+                in_dict[counter] = param.detach().view(-1)
+                counter += 1
+
+    elif arch == 'resnet':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' \
+                not in name and 'fc' not in name:
+                in_dict[counter] = param.detach().view(-1)
+                counter += 1
+    elif arch == 'resnet-not-bn':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name and 'bn' not in name and 'downsample' not in name:
+                in_dict[counter] = param.detach().view(-1)
+                counter += 1
     return in_dict
 
-def dict_to_model(model, out_dict):
+
+def dict_to_model(model, out_dict, arch):
     param_d = {}
     index = 0
-    for name, param in model.named_parameters(): 
-        if 'weight' in name:
-            layer_shape = param.shape
-            param_d[index] = param
-            # print(layer_shape)
-            # print(f"out-shape: {out_dict[index].shape}")
-            param.data = out_dict[index].view(layer_shape)
-            index += 1
+
+    if arch == 'cnn':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name:
+                layer_shape = param.shape
+                param_d[index] = param
+                # print(layer_shape)
+                # print(f"out-shape: {out_dict[index].shape}")
+                param.data = out_dict[index].view(layer_shape)
+                index += 1
+    elif arch == 'resnet':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' \
+                not in name and 'fc' not in name:
+                layer_shape = param.shape
+                param_d[index] = param
+                param.data = out_dict[index].view(layer_shape)
+                index += 1
+    elif arch == 'resnet-not-bn':
+        for name, param in model.named_parameters(): 
+            if 'weight' in name and 'bn' not in name and 'downsample' not in name:
+                layer_shape = param.shape
+                param_d[index] = param
+                param.data = out_dict[index].view(layer_shape)
+                index += 1
 
 ## ====================================================================== ##
 def global_gsp(model, itr, sps):
@@ -244,22 +276,29 @@ def var_GSP(model, itr, sps):
 
 
 # ===================================== GSP FUNCTION ===========================================
-def gsp_model_apply(model, sps):
+def gsp_global_apply(model, sps, arch):
     ## Global Model Projection
-    in_dict = make_weight_dict(model)
-    # try:
-    #     X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
-    # except:
-    #     import pdb; pdb.set_trace()
-    X, ni_list = gsp_model.groupedsparseproj(in_dict, sps)
-    out_dict = gsp_model.unpad_output_mat(X, ni_list)
+    in_dict = make_weight_dict(model, arch)
+    try:
+        X, ni_list = gsp_global.groupedsparseproj(in_dict, sps)
+    except:
+        # import pdb; pdb.set_trace()
+        print(gsp_global.groupedsparseproj(in_dict, sps))
+        with open('problem_mat.pickle', 'wb') as handle:
+            pickle.dump(in_dict, handle)
+
+    out_dict = gsp_global.unpad_output_mat(X, ni_list)
 
     # Put Dict back into model
-    dict_to_model(model, out_dict)
+    dict_to_model(model, out_dict, arch)
 
 
 
-# ===================================== GSP-Resnet ===========================================
+
+## ============================================================================ ##
+## ================================ GSP-Resnet ================================ ##
+## ============================================================================ ##
+
 def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     """
     This function is for applying GSP layer-wise in a ResNet network in this repo.
@@ -272,21 +311,15 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     for name, param in model.named_parameters(): 
         params_d[name] = param
 
-        if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+        if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
             shape_list.append(param.data.shape)
             weight_d[name] = param  
-
-            # qq = [x for x in weight_d.keys()]  
-            # if param.dim() > 2:  #Only two different dimension for LeNet-5
             w_shape = param.shape
-            weight_d[counter] = param.detach().view(16,-1)
+            weight_d[counter] = param.detach().view(256,-1)
             param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
-            # else:
-            #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
-            # counter += 1
 
 
-def gsp_resnet_total(model, sps=0.95, gsp_func = gsp_gpu):
+def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):
     """
     This function is for applying GSP layer-wise in a ResNet network in this repo.
     The GSP is applied layer-wise separately.  
@@ -302,30 +335,57 @@ def gsp_resnet_total(model, sps=0.95, gsp_func = gsp_gpu):
             shape_list.append(param.data.shape)
             weight_d[name] = param  
 
-            # qq = [x for x in weight_d.keys()]  
-            # if param.dim() > 2:  #Only two different dimension for LeNet-5
             w_shape = param.shape
-            weight_d[counter] = param.detach().view(16,-1)
+            weight_d[counter] = param.detach().view(256,-1)
             param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
-            # else:
-            #     param.data = gsp_func.groupedsparseproj(param.detach(), sps)
-            # counter += 1
+
 
 def resnet_layerwise_sps(model):
     counter = 0
     weight_d = {}
-    sps_list = []
+    sps_list = {}
+    shape_list = {}
     for name, param in model.named_parameters(): 
         # if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
         if 'weight' in name:
+            shape_list[name] = param.detach().shape
             weight_d[counter] = param.detach().view(16,-1)
-            sps_list.append(sparsity(weight_d[counter])) 
-    qq = [x for x in sps_list]
-    return sps_list
+            sps_list[name] = sparsity(weight_d[counter]).item()
+    return sps_list, shape_list
 
-def resnet_layer_names(model):
-    layer_name = []
+
+def get_model_methods(obj):
+    obj_methods = [method_name for method_name in dir(obj) if callable(getattr(obj, method_name))]
+    for elem in obj_methods:
+        print(elem)
+
+def resnet_dict_weights(model):
+    params_d = {}
+    weight_d = {}
+    shape_list = {}
+    counter = 0
+    bn_total = 0
     for name, param in model.named_parameters(): 
-        if 'weight' in name:
-            layer_name.append(name)
-    return layer_name
+        params_d[name] = param
+        # if 'weight' in name and 'module.conv1' not in name and 'downsample' not in name and 'fc' not in name:
+        if 'weight' in name and 'bn' in name:
+            shape_list[name] = param.data.shape
+            weight_d[name] = param
+            bn_total += param.data.shape[0]
+
+    return params_d, weight_d
+
+
+def get_histogram(m_weight):
+    cw = m_weight.cpu().detach().numpy().flatten()
+    max_w = np.max(cw)
+    min_w = np.min(cw)
+    # nb = (max_w - min_w)/1e-4
+    bins = np.arange(min_w, max_w, 1e-4)
+    hist, bin_edges = np.histogram( cw, bins)
+
+
+    import matplotlib.pyplot as plt
+    plt.bar(bin_edges[:-1], hist, width = 1e-4)
+    plt.xlim(min(bin_edges), max(bin_edges))
+    plt.savefig('foo.png')

@@ -240,7 +240,17 @@ def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
         try:
             xp_mat = xnew
         except:
-            pdb.set_trace()
+            # pdb.set_trace()
+            var_dict = {}
+            var_dict['in_dict'] = in_dict
+            var_dict['gnew'] = gnew
+            var_dict['k'] = k
+            var_dict['precision'] = precision
+            var_dict['r'] = r
+            var_dict['numiter'] = numiter
+            with open('var_dict.pickle', 'wb') as handle:
+                pickle.dump(var_dict, handle)
+
         gxpmu = gnew
 
     # -------------------------------------------
