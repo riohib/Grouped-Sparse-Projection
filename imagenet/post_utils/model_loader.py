@@ -28,76 +28,128 @@ import torchvision.models as models
 from torch.autograd import Variable
 import util
 
+#os.makedirs('saves', exist_ok=True)
+warnings.filterwarnings("ignore")
+
 
 import sys
 sys.path.append("../")
 sys.path.append("../..")
+import utils_gsp.gpu_projection as gsp_gpu
+import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
 
 
-#os.makedirs('saves', exist_ok=True)
-warnings.filterwarnings("ignore")
+# ===================================================================================
+# The Loader has Not yet been adapted to IMAGENET models. So might cause some issues:
+# But it works with Resnet models
 
-model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
+def load_model(model_path, model_type):
+    model_names = sorted(name for name in models.__dict__
+        if name.islower() and not name.startswith("__")
+        and callable(models.__dict__[name]))
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('data', metavar='DIR',
-                    help='path to dataset')
-parser.add_argument('--arch', '-a', metavar='ARCH', default='alexnet',
-                    choices=model_names,
-                    help='model architecture: ' +
-                        ' | '.join(model_names) +
-                        ' (default: resnet18)')
-parser.add_argument('--reg', type=int, default=0, metavar='R',
-                    help='regularization type: 0:None 1:L1 2:Hoyer 3:HS')
-parser.add_argument('--decay', type=float, default=0.001, metavar='D',
-                    help='weight decay for regularizer (default: 0.001)')                             
-parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
-                    help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=45, type=int, metavar='N',
-                    help='number of total epochs to run')
-parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-                    help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
-                    metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
-                    metavar='LR', help='initial learning rate')
-parser.add_argument('--lr_decay', '--learning-rate-decay', default=0.1, type=float,
-                    metavar='LRD', help='learning rate decay')
-parser.add_argument('--lr_int', '--learning-rate-interval', default=30, type=int,
-                    metavar='LRI', help='learning rate decay interval')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-                    help='momentum')
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--print-freq', '-p', default=100, type=int,
-                    metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
-                    help='evaluate model on validation set')
-parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                    help='use pre-trained model')
-parser.add_argument('--world-size', default=1, type=int,
-                    help='number of distributed processes')
-parser.add_argument('--dist-url', default='tcp://224.66.41.62:23456', type=str,
-                    help='url used to set up distributed training')
-parser.add_argument('--dist-backend', default='gloo', type=str,
-                    help='distributed backend')
-parser.add_argument('--seed', default=None, type=int,
-                    help='seed for initializing training. ')
-parser.add_argument('--gpu', default=None, type=int,
-                    help='GPU id to use.')
-parser.add_argument('--sensitivity', type=float, default=1e-4,
-                    help="sensitivity value that is used as threshold value for sparsity estimation")                    
-parser.add_argument('--sps', type=int, default=0.9, metavar='R',
-                    help='Set the Sparsity value for the GSP Algorithm')
+    # Use CUDA
+    #os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else 'cpu')
+
+    best_acc = 0  # best test accuracy
+
+
+
+    # Data
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
+    # if args.dataset == 'cifar10':
+    dataloader = datasets.CIFAR10
+    num_classes = 10
+    # else:
+    #     dataloader = datasets.CIFAR100
+    #     num_classes = 100
+
+
+    trainset = dataloader(root='../data', train=True, download=True, transform=transform_train)
+    trainloader = data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers= 4)
+
+    testset = dataloader(root='../data', train=False, download=False, transform=transform_test)
+    testloader = data.DataLoader(testset, batch_size=100, shuffle=False, num_workers= 4)
+
+    # Model
+    print("==> creating model '{}'".format('resnet'))
+    model = models.__dict__['resnet'](
+                num_classes=num_classes,
+                depth=56,
+                block_name='BasicBlock',
+            )
+
+    model = torch.nn.DataParallel(model).cuda()
+    cudnn.benchmark = True
+    print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
+
+    if model_type == 'baseline':
+        # Loading Basline Models
+        title = 'cifar-10-' + 'resnet'
+        # model_path = 'cifar/results/resnet-56_gsp0.99_/2020-11-06_03-05-12/model.pth'
+        checkpoint = torch.load(os.path.join('', './checkpoints/cifar10/resnet-56-baseline/model_best'+'.pth.tar'))
+        model.load_state_dict(checkpoint['state_dict'])
+    
+    elif model_type == 'sparse-model':
+        ## Loading Sparsified Models
+        title = 'cifar-10-' + 'resnet'
+        # model_path = './results/resnet-56_global_gsp-all_0.8_/11-16_20-20/model.pth'
+        model.load_state_dict(torch.load(model_path))
+
+    return model
+
+
+
+
+
+# ===================================================================================
+
+class Args:
+    data = '/data/users2/rohib/github/imagenet-data'
+    arch = 'resnet50'
+    reg = 0
+    decay = 4e-5
+    workers = 16
+    epochs = 5
+    start_epoch = 0
+    batch_size = 256
+    lr = 0.001
+    lr_decay = 0.1
+    lr_int = 30
+    momentum = 0.9
+    weight_decay = 1e-4
+    print_freq = 100
+    resume = False
+    evaluate = False
+    pretrained = ''
+    world_size = 1
+    dist_url = 'tcp://224.66.41.62:23456'
+    dist_backend = 'gloo'
+    seed = None
+    gpu = None
+    sensitivity = 1e-4
+    sps = 0.9
+
+# ===================================================================================
 
 
 global args, best_prec1, save_path
-args = parser.parse_args()
+args = Args
 best_prec1 = 0
 
 if args.resume:
@@ -122,7 +174,7 @@ logger.info("Saving to %s", save_path)
 logger.info("Running arguments: %s", args)
 
 
-def main():
+def main(args):
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -322,7 +374,6 @@ def main():
         
         torch.save(model.state_dict(), os.path.join(save_path, 'model.pth'))
 
-
 def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, curves, step):
     device = torch.device("cuda")
     batch_time = AverageMeter()
@@ -334,8 +385,9 @@ def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, cur
 
     # switch to train mode
     model.train()
-
     end = time.time()
+    itr = 0
+
     for i, (input, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -449,6 +501,10 @@ def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, cur
                    
     return curves, step
 
+
+
+
+# ========================================================================================
 def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -542,7 +598,3 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
-
-
-if __name__ == '__main__':
-    main()

@@ -25,16 +25,14 @@ def sparsity(matrix):
             spx = (np.sqrt(ni) - torch.norm(matrix[:, i], 1) / torch.norm(matrix[:, i], 2)) / (np.sqrt(ni) - 1)
             spxList.append(spx)
         spx = sum(spxList) / r
-
     return spx
 
 
 def checkCritical(matrix, critval_list, precision=1e-6):
+    
     max_elems = torch.max(matrix, 0)[0]
-
-    ind_crit_bool = (abs(matrix - max_elems) < precision)
+    ind_crit_bool = (abs(matrix - max_elems) < precision) #.type(torch.FloatTensor).to(device) 
     crit_points = matrix * ind_crit_bool
-
     num_crit_points = torch.sum(ind_crit_bool, dim=0)
 
     # Boolean of vector cols with non-trivial critical values
@@ -121,6 +119,7 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
 
     critmu = torch.tensor([])
     critval_list = []
+    # critval_list = torch.empty(0).to(device)
 
     vgmu = torch.zeros(1, device=device)
     # maxxi_list = []
@@ -231,13 +230,13 @@ def groupedsparseproj(matrix, sps, precision=1e-6, linrat=0.9):
 
 
 def load_matrix_debug():
-    with open("test_matrix.txt", "rb") as fpA:  # Pickling
+    with open("./matrices/matrix_1.pkl", "rb") as fpA:  # Pickling
         matrix = pickle.load(fpA)
-        matrix = matrix.detach()
+        matrix = torch.from_numpy(matrix)
         matrix = matrix.to(device)
     return matrix
 
-## ********************************************************************************** ##
+# ## ********************************************************************************** ##
 
 # matrix = load_matrix_debug()
 # matrix = torch.load("w1.pt")
@@ -276,4 +275,3 @@ def load_matrix_debug():
 # spNew = sparsity(xp_mat)
 
 # print("The Output Sparsity: " + str(spNew))
-

@@ -12,7 +12,7 @@ from functools import reduce
 from operator import mul
 
 # from net.models import LeNet_5 as LeNet
-import util
+# import util
 
 import sys
 sys.path.append('../')
@@ -308,50 +308,51 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     weight_d = {}
     shape_list = []
     counter = 0
+
     for name, param in model.named_parameters(): 
         params_d[name] = param
-
         if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
             shape_list.append(param.data.shape)
             weight_d[name] = param  
             w_shape = param.shape
-            weight_d[counter] = param.detach().view(256,-1)
+            dim_1 = w_shape[0] * w_shape[1]
+            weight_d[counter] = param.detach().view(dim_1,-1)
             param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
 
 
-def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):
-    """
-    This function is for applying GSP layer-wise in a ResNet network in this repo.
-    The GSP is applied layer-wise separately.  
-    """
-    params_d = {}
-    weight_d = {}
-    shape_list = []
-    counter = 0
-    for name, param in model.named_parameters(): 
-        params_d[name] = param
+# def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):
+#     """
+#     This function is for applying GSP layer-wise in a ResNet network in this repo.
+#     The GSP is applied layer-wise separately.  
+#     """
+#     params_d = {}
+#     weight_d = {}
+#     shape_list = []
+#     counter = 0
+#     for name, param in model.named_parameters(): 
+#         params_d[name] = param
 
-        if 'weight' in name and 'module.conv1' not in name and 'downsample' not in name and 'fc' not in name:
-            shape_list.append(param.data.shape)
-            weight_d[name] = param  
+#         if 'weight' in name and 'module.conv1' not in name and 'downsample' not in name and 'fc' not in name:
+#             shape_list.append(param.data.shape)
+#             weight_d[name] = param  
 
-            w_shape = param.shape
-            weight_d[counter] = param.detach().view(256,-1)
-            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+#             w_shape = param.shape
+#             weight_d[counter] = param.detach().view(256,-1)
+#             param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
 
 
 def resnet_layerwise_sps(model):
     counter = 0
     weight_d = {}
-    sps_list = {}
-    shape_list = {}
+    sps_dict = {}
+    shape_dict = {}
     for name, param in model.named_parameters(): 
-        # if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
-        if 'weight' in name:
-            shape_list[name] = param.detach().shape
+        if 'weight' in name and 'bn' not in name and 'downsample' not in name:
+        # if 'weight' in name:
+            shape_dict[name] = param.detach().shape            
             weight_d[counter] = param.detach().view(16,-1)
-            sps_list[name] = sparsity(weight_d[counter]).item()
-    return sps_list, shape_list
+            sps_dict[name] = sparsity(weight_d[counter]).item()
+    return sps_dict, shape_dict
 
 
 def get_model_methods(obj):
@@ -376,16 +377,28 @@ def resnet_dict_weights(model):
     return params_d, weight_d
 
 
-def get_histogram(m_weight):
-    cw = m_weight.cpu().detach().numpy().flatten()
-    max_w = np.max(cw)
-    min_w = np.min(cw)
-    # nb = (max_w - min_w)/1e-4
-    bins = np.arange(min_w, max_w, 1e-4)
-    hist, bin_edges = np.histogram( cw, bins)
 
 
-    import matplotlib.pyplot as plt
-    plt.bar(bin_edges[:-1], hist, width = 1e-4)
-    plt.xlim(min(bin_edges), max(bin_edges))
-    plt.savefig('foo.png')
+## ============================================================================ ##
+## =============================== GSP-Imagenet =============================== ##
+## ============================================================================ ##
+
+def gsp_imagenet_partial(model, sps=0.95, gsp_func = gsp_gpu):
+    """
+    This function is for applying GSP layer-wise in a ResNet network for the imagenet dataset.
+    The GSP is applied layer-wise separately.  
+    """
+    params_d = {}
+    weight_d = {}
+    shape_list = []
+    counter = 0
+
+    for name, param in model.named_parameters(): 
+        params_d[name] = param
+        if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+            shape_list.append(param.data.shape)
+            weight_d[name] = param  
+            w_shape = param.shape
+            dim_1 = w_shape[0] * w_shape[1]
+            weight_d[counter] = param.detach().view(dim_1,-1)
+            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)

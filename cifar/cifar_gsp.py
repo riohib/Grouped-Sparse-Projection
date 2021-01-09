@@ -115,7 +115,7 @@ if use_cuda:
 
 best_acc = 0  # best test accuracy
 # save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_'+ 'gsp' +str(args.sps)+'_', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_' + args.savetag + '_gsp-all_' +str(args.sps)+'_', datetime.now().strftime('%m-%d_%H-%M'))
+save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_' + args.savetag + '_shape_' +str(args.sps)+'_', datetime.now().strftime('%m-%d_%H-%M'))
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 else:
@@ -274,8 +274,8 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
         # sparse-projection
         if (itr % 200 == 0): #gsp every 200 iteration
             print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
-            # sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu)
-            sps_tools.gsp_global_apply(model, args.sps, 'resnet-not-bn')
+            sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu)
+            # sps_tools.gsp_global_apply(model, args.sps, 'resnet-not-bn')
         itr+=1
 
         # measure elapsed time
