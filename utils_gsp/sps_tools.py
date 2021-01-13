@@ -87,12 +87,12 @@ def apply_gsp(model, sps, gsp_func = gsp_gpu):
             shape_list.append(param.data.shape)    
             if param.dim() > 2:  #Only two different dimension for LeNet-5
                 w_shape = param.shape
-                weight_d[counter] = param.detach().view(50,-1)
+                dim_1 = w_shape[0] * w_shape[1]
+                weight_d[counter] = param.detach().view(dim_1,-1)
                 param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
             else:
                 param.data = gsp_func.groupedsparseproj(param.detach(), sps)
             counter += 1
-
 
 def get_layerwise_sps(model):
     counter = 0
@@ -118,21 +118,6 @@ def get_cnn_layer_shape(model):
         if 'weight' in name:
             print(f"Paramater Shape: {param.shape}")
             counter += 0
-
-# def cnn_model_sps(model):
-#     w1 = model.conv1.weight.detach()
-#     w2 = model.conv2.weight.detach()
-#     w3 = model.fc1.weight.detach()
-#     w4 = model.fc2.weight.detach()
-
-#     reshaped_w1 = w1.view(500,-1)
-#     reshaped_w2 = w2.view(500,-1)
-#     reshaped_w3 = w3.view(500,-1)
-#     reshaped_w4 = w4.view(500,-1)
-    
-#     tot_weight = torch.cat([reshaped_w1,reshaped_w2,reshaped_w3,reshaped_w4], dim=1)
-#     print("Total Model Sparsity w1: %.2f \n" % (sparsity(tot_weight)))
-#     return sparsity(tot_weight)
 
 def cnn_layer_Ploter(model, title):
     subRow = 4
@@ -349,8 +334,10 @@ def resnet_layerwise_sps(model):
     for name, param in model.named_parameters(): 
         if 'weight' in name and 'bn' not in name and 'downsample' not in name:
         # if 'weight' in name:
-            shape_dict[name] = param.detach().shape            
-            weight_d[counter] = param.detach().view(16,-1)
+            shape_dict[name] = param.detach().shape   
+            w_shape = param.shape
+            dim_1 = w_shape[0] * w_shape[1]         
+            weight_d[counter] = param.detach().view(dim_1,-1)
             sps_dict[name] = sparsity(weight_d[counter]).item()
     return sps_dict, shape_dict
 

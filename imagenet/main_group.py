@@ -28,12 +28,11 @@ import torchvision.models as models
 from torch.autograd import Variable
 import util
 
-
 import sys
 sys.path.append("../")
 sys.path.append("../..")
 import utils_gsp.sps_tools as sps_tools
-
+import utils_gsp.gpu_projection as gsp_gpu
 
 #os.makedirs('saves', exist_ok=True)
 warnings.filterwarnings("ignore")
@@ -94,7 +93,8 @@ parser.add_argument('--sensitivity', type=float, default=1e-4,
                     help="sensitivity value that is used as threshold value for sparsity estimation")                    
 parser.add_argument('--sps', type=int, default=0.9, metavar='R',
                     help='Set the Sparsity value for the GSP Algorithm')
-
+parser.add_argument('--gsp-interval', type=int, default=1000, metavar='R',
+                    help='Iteration interval for GSP Projection')
 
 global args, best_prec1, save_path
 args = parser.parse_args()
@@ -248,7 +248,7 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        curves,step = train(train_loader, model, criterion, optimizer, epoch, args.reg, args.decay, curves, step)
+        curves,step = train(train_loader, model, criterion, optimizer, epoch, args.reg, args.decay, curves, step, args.gsp_interval)
 
         # evaluate on validation set
         valid[epoch, 0] = epoch
@@ -323,7 +323,7 @@ def main():
         torch.save(model.state_dict(), os.path.join(save_path, 'model.pth'))
 
 
-def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, curves, step):
+def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, curves, step, gsp_interval):
     device = torch.device("cuda")
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -331,7 +331,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, cur
     total_losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
-
+    itr = 0
     # switch to train mode
     model.train()
 
@@ -373,11 +373,11 @@ def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, cur
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
-        device = torch.device("cuda") 
+        device = torch.device("cuda")
 
         #=========================================================================
         # sparse-projection
-        if (itr % 200 == 0): #gsp every 200 iteration
+        if (itr % gsp_interval == 0): #gsp every gsp_interval iteration
             print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
             sps_tools.gsp_imagenet_partial(model, args.sps, gsp_func = gsp_gpu)
         itr+=1
