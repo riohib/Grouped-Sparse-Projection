@@ -9,6 +9,8 @@ cnn_lenet_5/old_LeNet5.py
 
 cifar/data/
 
+imagenet/archived-results
+imagenet/results
 
 .vscode/settings.json
 

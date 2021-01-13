@@ -149,7 +149,6 @@ def make_weight_dict(model, arch):
             if 'weight' in name:
                 in_dict[counter] = param.detach().view(-1)
                 counter += 1
-
     elif arch == 'resnet':
         for name, param in model.named_parameters(): 
             if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' \
@@ -224,7 +223,6 @@ def global_gsp(model, itr, sps):
     i = 0
     for name, param in model.named_parameters(): 
         if 'weight' in name:
-            
             if i == 0:
                 start = 0
                 end = second_dim[i]

@@ -38,12 +38,6 @@ parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--epochs', type=int, default=250, metavar='N',
                     help='number of epochs to train (default: 100)')
-                    
-parser.add_argument('--reg', type=int, default=0, metavar='R',
-                    help='regularization type: 0:None 1:L1 2:Hoyer 3:HS 4:Transformed L1')
-# parser.add_argument('--decay', type=float, default=0.001, metavar='D',
-#                     help='weight decay for regularizer (default: 0.001)')
-
 parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                     help='learning rate (default: 0.01)')
 parser.add_argument('--lr-step', type=int, default=80, metavar='LR-STEP',
@@ -134,7 +128,8 @@ def train(epochs, threshold=0.0):
                 done = batch_idx * len(data)
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f"Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} \
-                    ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']:.4f} GSP in itr: {last_gsp_itr} sps: {args.sps:.2f}" )
+                ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']:.4f} \
+                GSP in itr: {last_gsp_itr} sps: {args.sps:.2f} Total Progress:" )
             itr+=1
         scheduler.step()
 

@@ -40,28 +40,27 @@ parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--epochs', type=int, default=250, metavar='N',
                     help='number of epochs to train (default: 100)')
-                    
-parser.add_argument('--reg_type', type=int, default=0, metavar='R',
-                    help='regularization type: 0:None 1:L1 2:Hoyer 3:HS 4:Transformed L1')
-parser.add_argument('--decay', type=float, default=0.001, metavar='D',
-                    help='weight decay for regularizer (default: 0.001)')
 
 parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                     help='learning rate (default: 0.01)')
+parser.add_argument('--lr-step', type=int, default=75, metavar='LR-STEP',
+                    help='learning rate (default: 75)')
+
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 parser.add_argument('--seed', type=int, default=12345678, metavar='S',
                     help='random seed (default: 42)')
+
 parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--log', type=str, default='log.txt',
                     help='log file name')
-parser.add_argument('--gsp', type=str, default='pre',
-                    help='gsp pre or post update')
+
+parser.add_argument('--gsp-int', type=int, default=50,
+                    help='gsp application frequency')
 parser.add_argument('--sps', type=float, default=0.95, metavar='SPS',
-                    help='gsp sparsity value (default: 0.95)')  
-parser.add_argument('--device', type=str, default='cpu',
-                    help='cpu or gpu gsp version')                                      
+                    help='gsp sparsity value (default: 0.95)')
+
 parser.add_argument('--pretrained', type=str, default='./saves/elt_0.0_0',
                     help='the path to the pretrained model')                    
 args = parser.parse_args()
@@ -93,18 +92,6 @@ test_loader = torch.utils.data.DataLoader(
 
 #==============================================================================================
 logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
-## Select which GSP Function to use:
-# gs_projection = gsp_reg.groupedsparseproj
-
-# if args.device == 'gpu':
-#     gs_projection = gsp_gpu.groupedsparseproj
-#     print("gpu")
-# else:
-#     gs_projection = gsp_vec.groupedsparseproj
-
-gsp_interval = 20; sps= args.sps
-
-# ===================================== GSP FUNCTION ===========================================
 
 # Define which model to use
 model = LeNet(mask=False).to(device)
@@ -112,19 +99,15 @@ model = LeNet(mask=False).to(device)
 print(model)
 util.print_model_parameters(model)
 
-# NOTE : `weight_decay` term denotes L2 regularization loss term
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
 initial_optimizer_state_dict = optimizer.state_dict()
-
-# num_prefetch = 200
-# train_loader_1 = prefetch_dataloader(train_loader, num_prefetch)
  
 
-def train(epochs, decay=0, threshold=0.0):
+def train(epochs, threshold=0.0):
     itr = 0
     model.train()
     pbar = tqdm(range(epochs), total=epochs)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.1)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
     curves = np.zeros((epochs,14))
     
     for epoch in pbar:
@@ -133,42 +116,23 @@ def train(epochs, decay=0, threshold=0.0):
 
             optimizer.zero_grad()
 
-            if (itr % gsp_interval == 0) and args.gsp == 'pre':
-                sps_tools.gsp_model_apply(model, sps)
-                print("GSP-Pre-ing: itr:  " + str(itr))
-
             output = model(data)
             loss = F.nll_loss(output, target)
-            
-            reg = 0.0
-            if decay:
-                reg = 0.0
-                for param in model.parameters():
-                    if param.requires_grad and torch.sum(torch.abs(param))>0:
-                        if args.reg_type==1:    
-                            reg += torch.sum(torch.abs(param))
-                        elif args.reg_type==2:
-                            reg += torch.sum(torch.abs(param))/torch.sqrt(torch.sum(param**2))
-                        elif args.reg_type==3:
-                            reg += (torch.sum(torch.abs(param))**2)/torch.sum(param**2)
-                        elif args.reg_type==4:    
-                            reg += torch.sum(2*torch.abs(param)/(1+torch.abs(param)))
-                        else:
-                            reg = 0.0
 
-            total_loss = loss #+decay*reg
+            total_loss = loss
             total_loss.backward()
             optimizer.step()
 
-            if (itr % gsp_interval == 0) and args.gsp == 'post':
-                sps_tools.apply_gsp_cnn(model, sps, gsp_func = gsp_gpu)
-                print("GSP-Post-ing: itr:  " + str(itr))
-            
+            if (itr % args.gsp_int == 0):
+                sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
+                last_gsp_itr = itr
+
             if batch_idx % args.log_interval == 0:
                 done = batch_idx * len(data)
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f"Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} \
-                    ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']}")
+                    ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']} \
+                         GSP itr: {itr}  sps: {args.sps:.2f}")
             itr += 1
         scheduler.step()
 
@@ -190,18 +154,17 @@ def test():
     return accuracy
 
 if args.pretrained:
-    # model.load_state_dict(torch.load('saves/F95_2_elt_0.0_0_'+ str(args.gsp)+'.pth'))
     # model.load_state_dict(torch.load('saves/F97_1_elt_0.0_0_'+ str(args.gsp)+'.pth'))
     model.load_state_dict(torch.load(args.pretrained + '.pth'))
     accuracy = test()
 
 # Initial training
 print("--- Initial training ---")
-train(args.epochs, decay=args.decay, threshold=0.0)
+train(args.epochs, threshold=0.0)
 accuracy = test()
-# torch.save(model.state_dict(), 'saves/F97_1_elt_'+str(args.decay)+'_'+str(args.reg_type)+'_'+str(args.gsp)+'.pth')
+
 # torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'/'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'.pth')
+torch.save(model.state_dict(), 'saves/2021/S'+str(args.sps)+'.pth')
 
 util.log(args.log, f"initial_accuracy {accuracy}")
 #util.print_nonzeros(model)
