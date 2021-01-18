@@ -26,6 +26,7 @@ logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else 'cpu')
 
+
 #======================================================================================================
 #====================================== Sparsity Calculator ===========================================
 #=====================================================================================================
@@ -95,22 +96,27 @@ def apply_gsp(model, sps, gsp_func = gsp_gpu):
             counter += 1
 
 def get_layerwise_sps(model):
+    """
+    This function will output a list of layerwise sparsity of a LeNet-5 CNN model.
+    The sparsity measure is the Hoyer Sparsity Measure.
+    """
     counter = 0
     weight_d = {}
-    sps_list = []
+    sps_d = {}
     for name, param in model.named_parameters(): 
         if 'weight' in name:
-            # shape_list.append(param.data.shape)
             if param.dim() > 2:  #Only two different dimension for LeNet-5
-                weight_d[counter] = param.detach().view(50,-1)
-                sps_list.append(sparsity(weight_d[counter])) 
+                w_shape = param.shape
+                dim_1 = w_shape[0] * w_shape[1]
+                weight_d[counter] = param.detach().view(dim_1,-1)
+                sps_d[name] = sparsity(weight_d[counter])
             else:
-                sps_list.append(sparsity(param.data)) 
+                sps_d[name] = sparsity(param.data)
             counter += 1
+    
+    w_name_list = [x for x in sps_d.keys()] 
 
-    print(f"Layerwise sps: L1: {sps_list[0]:.4f} | L2: {sps_list[1]:.4f} | \
-        L3: {sps_list[2]:.4f} | L4: {sps_list[3]:.4f}")
-    return sps_list
+    return sps_d
 
 def get_cnn_layer_shape(model):
     counter = 0
@@ -361,8 +367,13 @@ def resnet_dict_weights(model):
 
     return params_d, weight_d
 
-
-
+def get_model_layers(model):
+    params_d = {}
+    for name, param in model.named_parameters(): 
+        params_d[name] = param
+    
+    layer_list = [x for x in params_d.keys()]
+    return layer_list
 
 ## ============================================================================ ##
 ## =============================== GSP-Imagenet =============================== ##
@@ -380,7 +391,7 @@ def gsp_imagenet_partial(model, sps=0.95, gsp_func = gsp_gpu):
 
     for name, param in model.named_parameters(): 
         params_d[name] = param
-        if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+        if 'weight' in name and 'layer' in name and 'bn' not in name and 'downsample' not in name: # and 'fc' not in name
             shape_list.append(param.data.shape)
             weight_d[name] = param  
             w_shape = param.shape

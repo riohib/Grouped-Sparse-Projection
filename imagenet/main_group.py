@@ -61,12 +61,14 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
+
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_decay', '--learning-rate-decay', default=0.1, type=float,
                     metavar='LRD', help='learning rate decay')
 parser.add_argument('--lr_int', '--learning-rate-interval', default=30, type=int,
                     metavar='LRI', help='learning rate decay interval')
+
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
@@ -89,6 +91,7 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
+
 parser.add_argument('--sensitivity', type=float, default=1e-4,
                     help="sensitivity value that is used as threshold value for sparsity estimation")                    
 parser.add_argument('--sps', type=int, default=0.9, metavar='R',
