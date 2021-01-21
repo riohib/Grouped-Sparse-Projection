@@ -18,11 +18,13 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
+import logging 
 import sys
 sys.path.append("../")
 sys.path.append("../..")
 import utils_gsp.sps_tools as sps_tools
 import utils_gsp.gpu_projection as gsp_gpu
+from torch.utils.tensorboard import SummaryWriter
 
 
 model_names = sorted(name for name in models.__dict__
@@ -88,18 +90,47 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 
-parser.add_argument('--sps', type=int, default=0.8, metavar='R',
+parser.add_argument('--sps', type=int, default=0.85, metavar='R',
                     help='Set the Sparsity value for the GSP Algorithm')
-parser.add_argument('--gsp-interval', type=int, default=500, metavar='R',
+parser.add_argument('--gsp-interval', type=int, default=250, metavar='R',
                     help='Iteration interval for GSP Projection')
 
 
 
 best_acc1 = 0
 
+def create_logger(gpu_id):
+    # ----------------------------------------------------------------------
+    logger_name = "logger_gpu_" + str(gpu_id)
+
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(levelname)s:%(name)s:%(message)s')
+
+    logger_path = './logs/imagenet_gpu_' + str(gpu_id) + '.log'
+    # if not os.path.exists(logger_path):
+    #     os.makedirs(logger_path)
+    file_handler = logging.FileHandler(logger_path)
+    
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return logger
+    # ----------------------------------------------------------------------
 
 def main():
+
     args = parser.parse_args()
+    
+    # args.logger = create_logger()
+    # args.logger.info("Main Process Log")
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -137,10 +168,18 @@ def main_worker(gpu, ngpus_per_node, args):
     global best_acc1
     args.gpu = gpu
 
-    print(f"Value of args.gpu: {args.gpu}")
+    # ------------------------------------------
+    logger = create_logger(args.gpu)
+    logger.info("Entering main_worker Log")
+    # ------------------------------------------
+    if args.gpu == 0:
+        args.writer = SummaryWriter()
+    # ------------------------------------------
+
+    logger.info(f"Value of args.gpu: {args.gpu}")
 
     if args.gpu is not None:
-        print("Use GPU: {} for training".format(args.gpu))
+        logger.info("Use GPU: {} for training".format(args.gpu))
 
     if args.distributed:
         if args.dist_url == "env://" and args.rank == -1:
@@ -153,14 +192,14 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     # create model
     if args.pretrained:
-        print("=> using pre-trained model '{}'".format(args.arch))
+        logger.info("=> using pre-trained model '{}'".format(args.arch))
         model = models.__dict__[args.arch](pretrained=True)
     else:
-        print("=> creating model '{}'".format(args.arch))
+        logger.info("=> creating model '{}'".format(args.arch))
         model = models.__dict__[args.arch]()
 
     if not torch.cuda.is_available():
-        print('using CPU, this will be slow')
+        logger.info('using CPU, this will be slow')
     elif args.distributed:
         # For multiprocessing distributed, DistributedDataParallel constructor
         # should always set the single device scope, otherwise,
@@ -200,7 +239,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
+            logger.info("=> loading checkpoint '{}'".format(args.resume))
             if args.gpu is None:
                 checkpoint = torch.load(args.resume)
             else:
@@ -214,10 +253,10 @@ def main_worker(gpu, ngpus_per_node, args):
                 best_acc1 = best_acc1.to(args.gpu)
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
+            logger.info("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
+            logger.info("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
 
@@ -265,7 +304,7 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train(train_loader, model, criterion, optimizer, epoch, args, logger)
 
         # evaluate on validation set
         acc1 = validate(val_loader, model, criterion, args)
@@ -285,7 +324,7 @@ def main_worker(gpu, ngpus_per_node, args):
             }, is_best)
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, criterion, optimizer, epoch, args, logger):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -301,6 +340,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
+        
+        if (i % 50 == 0):
+            logger.info(f"The training loop is running: {i}")
+
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -324,19 +367,31 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         loss.backward()
         optimizer.step()
 
-        #=========================================================================
+        #=============================================================================
         # sparse-projection
         if (i % args.gsp_interval == 0): #gsp every gsp_interval iteration
-            print("GSP-Post-ing: iteration:  " + str(i) + 'with sps: ' +str(args.sps))
+            logger.info("GSP-Post-ing: iteration:  " + str(i) + 'with sps: ' +str(args.sps))
             sps_tools.gsp_imagenet_partial(model, args.sps, gsp_func = gsp_gpu)
-        #=========================================================================
+        #=============================================================================
+        if epoch == 0:
+            last_epoch = None
+        if args.gpu == 0 and (i % 500 == 0):
+            summary_writer(model, args, epoch, last_epoch, i, AverageMeter)
+        #=============================================================================
+
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
-            progress.display(i)
+        # if i % args.print_freq == 0:
+        #     progress.display(i)
+
+        
+        # log epoch progress and status:
+        logger.info(f"Epoch [{epoch}] [{i}/{len(train_loader)}] \t Arch: {args.arch} \t SPS: {args.sps} \t Loss: {losses.avg:.2f} \t \
+             acc@1: {top1.avg:.2f} \t acc@5: {top5.avg:.2f}")
+
 
 
 def validate(val_loader, model, criterion, args):
@@ -453,6 +508,23 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+def summary_writer(model, args, epoch, last_epoch, i, AverageMeter):
+
+    losses = AverageMeter('Loss', ':.4e')
+    top1 = AverageMeter('Acc@1', ':6.2f')
+    top5 = AverageMeter('Acc@5', ':6.2f')
+
+    if args.gpu == 0 and (i % 500 == 0):
+        args.writer.add_scalar('Loss/train', losses.avg, i)
+        args.writer.add_scalar('Acc/Acc@1-train', top1.avg, i)
+        args.writer.add_scalar('Acc/Acc@5-train', top5.avg, i)
+
+    if args.gpu == 0 and (last_epoch != epoch):
+        avg_sps, _ , _ = sps_tools.resnet_layerwise_sps(model)
+
+        args.writer.add_scalar('Avg Model Sparsity', avg_sps, epoch)
+        last_epoch = epoch
 
 
 if __name__ == '__main__':

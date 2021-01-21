@@ -336,14 +336,22 @@ def resnet_layerwise_sps(model):
     sps_dict = {}
     shape_dict = {}
     for name, param in model.named_parameters(): 
-        if 'weight' in name and 'bn' not in name and 'downsample' not in name:
-        # if 'weight' in name:
-            shape_dict[name] = param.detach().shape   
-            w_shape = param.shape
-            dim_1 = w_shape[0] * w_shape[1]         
-            weight_d[counter] = param.detach().view(dim_1,-1)
-            sps_dict[name] = sparsity(weight_d[counter]).item()
-    return sps_dict, shape_dict
+        # if 'weight' in name and 'bn' not in name and 'downsample' not in name:
+        if 'weight' in name:
+            if param.dim() > 2:
+                shape_dict[name] = param.detach().shape   
+                w_shape = param.shape
+                dim_1 = w_shape[0] * w_shape[1]         
+                weight_d[counter] = param.detach().view(dim_1,-1)
+                sps_dict[name] = sparsity(weight_d[counter]).item()
+            else:
+                sps_dict[name] = sparsity(param.data).item()
+
+    # Average Sparsity of the whole Model:
+    sps_list = [vals for vals in sps_dict.values()]
+    avg_sps = sum(sps_list)/len(sps_list)
+
+    return avg_sps, sps_dict, shape_dict
 
 
 def get_model_methods(obj):

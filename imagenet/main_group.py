@@ -126,7 +126,6 @@ logger.info("Running arguments: %s", args)
 
 
 def main():
-
     if args.seed is not None:
         random.seed(args.seed)
         torch.manual_seed(args.seed)
@@ -363,7 +362,7 @@ def train(train_loader, model, criterion, optimizer, epoch, reg_type, decay, cur
                         reg += ( (torch.sum(torch.sqrt(torch.sum(param**2,0)))**2) + (torch.sum(torch.sqrt(torch.sum(param**2,1)))**2) )/torch.sum(param**2)    
                     else:
                         reg = 0.0         
-        total_loss = loss+decay*reg
+        total_loss = loss #+decay*reg
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(output, target, topk=(1, 5))
