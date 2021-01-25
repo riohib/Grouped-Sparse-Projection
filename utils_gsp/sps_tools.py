@@ -33,14 +33,15 @@ device = torch.device("cuda" if use_cuda else 'cpu')
 def sparsity(matrix):
     ni = matrix.shape[0]
 
-    # Get Indices of all zero vector columns.
+    # Get Indices of columns with all-0 vectors.
     zero_col_ind = (abs(matrix.sum(0) - 0) < 2.22e-16).nonzero().view(-1)  
     spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
     if len(zero_col_ind) != 0:
         spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
     
     if matrix.dim() > 1:   
-        sps_avg =  spx_c.sum() / matrix.shape[1]
+        # sps_avg =  spx_c.sum() / matrix.shape[1]
+        sps_avg = spx_c.mean()
     elif matrix.dim() == 1:  # If not a matrix but a column vector!
         sps_avg =  spx_c    
     return sps_avg
@@ -53,15 +54,16 @@ def padded_sparsity(matrix, ni_list):
     """
 
     ni = matrix.shape[0]
+    ni_tensor = torch.tensor(ni_list).to(device)
 
     # Get Indices of all zero vector columns.
     zero_col_ind = (abs(matrix.sum(0) - 0) < 2.22e-16).nonzero().view(-1)  
-    spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
+    spx_c = (torch.sqrt(ni_tensor) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (torch.sqrt(ni_tensor) - 1)
     if len(zero_col_ind) != 0:
         spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
     
     if matrix.dim() > 1:   
-        sps_avg =  spx_c.sum() / matrix.shape[1]
+        sps_avg = spx_c.mean()
     elif matrix.dim() == 1:  # If not a matrix but a column vector!
         sps_avg =  spx_c    
     return sps_avg
@@ -186,6 +188,7 @@ def apply_concat_gsp(model, sps):
     xp_mat, ni_list = gsp_global.groupedsparseproj(matrix, val_mask, sps)
     rebuild_nnlayers(xp_mat, ni_list, shape_l, model)
 
+    return xp_mat, ni_list
 
 def concat_nnlayers(model):
     shape_l = []
