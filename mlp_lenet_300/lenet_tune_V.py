@@ -55,6 +55,8 @@ if use_cuda:
 else:
     print('Not using CUDA!!!')
 
+print(f"All the arguments used are: {args}")
+
 # Loader
 kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
 train_loader = torch.utils.data.DataLoader(
@@ -131,6 +133,7 @@ def test():
 
 
 model.load_state_dict(torch.load(args.model+'.pth'))
+
 # Initial training
 print("--- Pruning ---")
 for name, p in model.named_parameters():

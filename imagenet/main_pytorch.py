@@ -313,6 +313,9 @@ def main_worker(gpu, ngpus_per_node, args):
         is_best = acc1 > best_acc1
         best_acc1 = max(acc1, best_acc1)
 
+        # Write the Hoyer Sparsity to Tensorboard
+        summary_epoch(model, args, epoch)
+
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
             save_checkpoint({
@@ -373,10 +376,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, logger):
             logger.info("GSP-Post-ing: iteration:  " + str(i) + 'with sps: ' +str(args.sps))
             sps_tools.gsp_imagenet_partial(model, args.sps, gsp_func = gsp_gpu)
         #=============================================================================
-        if epoch == 0:
-            last_epoch = None
         if args.gpu == 0 and (i % 500 == 0):
-            summary_writer(model, args, epoch, last_epoch, i, AverageMeter)
+            summary_writer(model, args, epoch, i, AverageMeter)
         #=============================================================================
 
 
@@ -389,8 +390,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args, logger):
 
         
         # log epoch progress and status:
-        logger.info(f"Epoch [{epoch}] [{i}/{len(train_loader)}] \t Arch: {args.arch} \t SPS: {args.sps} \t Loss: {losses.avg:.2f} \t \
-             acc@1: {top1.avg:.2f} \t acc@5: {top5.avg:.2f}")
+        if (i % 100 == 0):
+            logger.info(f"Epoch [{epoch}] [{i}/{len(train_loader)}] \t Arch: {args.arch} \t SPS: {args.sps} \t Loss: {losses.avg:.2f} \t \
+                acc@1: {top1.avg:.2f} \t acc@5: {top5.avg:.2f}")
 
 
 
@@ -509,7 +511,7 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
-def summary_writer(model, args, epoch, last_epoch, i, AverageMeter):
+def summary_writer(model, args, epoch, i, AverageMeter):
 
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -520,11 +522,10 @@ def summary_writer(model, args, epoch, last_epoch, i, AverageMeter):
         args.writer.add_scalar('Acc/Acc@1-train', top1.avg, i)
         args.writer.add_scalar('Acc/Acc@5-train', top5.avg, i)
 
-    if args.gpu == 0 and (last_epoch != epoch):
+def summary_epoch(model, args, epoch):
+    if args.gpu == 0:
         avg_sps, _ , _ = sps_tools.resnet_layerwise_sps(model)
-
         args.writer.add_scalar('Avg Model Sparsity', avg_sps, epoch)
-        last_epoch = epoch
 
 
 if __name__ == '__main__':

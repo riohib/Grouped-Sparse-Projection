@@ -45,6 +45,29 @@ def sparsity(matrix):
         sps_avg =  spx_c    
     return sps_avg
 
+def padded_sparsity(matrix, ni_list):
+    """
+    This Hoyer Sparsity Calculation is for matrices with the end of the columns that are padded. Hence,
+    it needs the information of how much of each columns are elements and how much of them are padded.
+    ni_list: Contains the number of values in each column (rest are padded with zero).
+    """
+
+    ni = matrix.shape[0]
+
+    # Get Indices of all zero vector columns.
+    zero_col_ind = (abs(matrix.sum(0) - 0) < 2.22e-16).nonzero().view(-1)  
+    spx_c = (np.sqrt(ni) - torch.norm(matrix,1, dim=0) / torch.norm(matrix,2, dim=0)) / (np.sqrt(ni) - 1)
+    if len(zero_col_ind) != 0:
+        spx_c[zero_col_ind] = 1  # Sparsity = 1 if column already zero vector.
+    
+    if matrix.dim() > 1:   
+        sps_avg =  spx_c.sum() / matrix.shape[1]
+    elif matrix.dim() == 1:  # If not a matrix but a column vector!
+        sps_avg =  spx_c    
+    return sps_avg
+
+
+
 def sparsity_dict(in_dict):
     r = len(in_dict)
     spx = 0
@@ -144,9 +167,71 @@ def cnn_layer_Ploter(model, title):
     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     fig.colorbar(im, cax=cbar_ax)
 
-## ====================================================================== ##
-## =========== Helper Functions for Global GSP with pad ================= ##
-## ====================================================================== ##
+## ================================================================================================ ##
+## ======================== Helper Functions for Global GSP with pad ============================== ##
+## ================================================================================================ ##
+# ----------------------------------------------------------------------------------------------------
+# These set of Functions are for concatenating all the NN Layer weights side by side and using GSP. 
+# These differ from the next set of functions which flatten the layers and stack them side by side 
+# (utilizing dict data structures). These functions however simply create a tensor and passes to
+# padded GSP.
+
+def apply_concat_gsp(model, sps):
+    matrix, val_mask, shape_l = concat_nnlayers(model)
+    try:
+        type(matrix) == torch.Tensor
+    except:
+        print("The output of concat_nnlayers - 'matrix' is not a Torch Tensor!")
+
+    xp_mat, ni_list = gsp_global.groupedsparseproj(matrix, val_mask, sps)
+    rebuild_nnlayers(xp_mat, ni_list, shape_l, model)
+
+
+def concat_nnlayers(model):
+    shape_l = []
+    for i, (name, param) in enumerate(model.named_parameters()):
+        if 'weight' in name:
+            shape_l.append(tuple(param.shape)) 
+    
+    max_dim0 = sum([x[0] for x in shape_l])
+    max_dim1 = sum([x[1] for x in shape_l])
+    
+    matrix = torch.zeros(max_dim0, max_dim1, device=device)
+    val_mask = torch.zeros(max_dim0, max_dim1, device=device)
+    
+    counter = 0
+    dim1 = 0
+    ni_list = []
+
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            prev_dim0, cur_dim0 = shape_l[counter-1][0], shape_l[counter][0]
+            prev_dim1, cur_dim1 = shape_l[counter-1][1], shape_l[counter][1]
+
+            matrix[0:cur_dim0, dim1:dim1+cur_dim1] = param.data
+            val_mask[0:cur_dim0, dim1:dim1+cur_dim1] = torch.ones(shape_l[counter]).to(device)
+            
+            dim1 += cur_dim1
+            counter += 1
+    return matrix, val_mask, shape_l
+
+def rebuild_nnlayers(matrix, ni_list, shape_l, model):
+    counter = 0
+    dim1 = 0
+    ni_list = []
+
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            prev_dim0, cur_dim0 = shape_l[counter-1][0], shape_l[counter][0]
+            prev_dim1, cur_dim1 = shape_l[counter-1][1], shape_l[counter][1]
+            param.data = matrix[0:cur_dim0, dim1:dim1+cur_dim1]
+
+            dim1 += cur_dim1
+            counter += 1
+
+### ===================================================================================================
+### ===================================================================================================
+
 def make_weight_dict(model, arch):
     in_dict = {}
     counter = 0
@@ -386,7 +471,6 @@ def get_model_layers(model):
 ## ============================================================================ ##
 ## =============================== GSP-Imagenet =============================== ##
 ## ============================================================================ ##
-
 def gsp_imagenet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     """
     This function is for applying GSP layer-wise in a ResNet network for the imagenet dataset.

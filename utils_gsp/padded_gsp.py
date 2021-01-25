@@ -10,7 +10,15 @@ import time
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+
+
+### ===================================================================================================
 def pad_input_dict(in_dict):
+    """
+    This function is for the case when the layers are flattened in a column and structured as
+    a dictionary. Each columns stored in the dictionary is  padded at the end with zeros and a
+    matrix is created.
+    """
     ni_list = [x.shape[0] for x in in_dict.values()]
     max_rows = max(ni_list)
 
@@ -118,20 +126,41 @@ def gmu(p_matrix, xp_mat, mu=0, *args):
 # --------------------------------------------------------------------------------------------------- #
 # ------------------------------------- groupedsparseproj ------------------------------------------- #
 # --------------------------------------------------------------------------------------------------- #
-def groupedsparseproj(in_dict, sps, precision=1e-6, linrat=0.9):
+def groupedsparseproj(input_data, inv_mask, sps, precision=1e-6, linrat=0.9):
     # sps = 0.9 ;  precision=1e-6; linrat=0.9
+    """
+    This function will produce a sparse matrix of the matrices in the input_data. This a padded 
+    implementaion of the GSP, hence this version is for use when we want to concatenate matrices
+    of uneven dimensions. This version will pad the remaining elements with zero to get a 
+    rectangular matrix.
+
+    Inputs:
+    1. input_data: Can be a dictionary with each value containing a 1D flattened version of a torch.Tensor.
+                   Can be a matrix already concatenated beforehand. In such a case, the mask is required
+                   with ones in the place where the matrix block is present in the wall block.
+    2. inv_mask: torch.Tensor mask of ones in the positions where the values are in the bigger padded mat.
+    3. sps : Sparsity constraining between [0,1].
+    """
     epsilon = 10e-15
     k = 0
     muup0 = 0
 
-    matrix, ni_list = pad_input_dict(in_dict)
-    ni_tensor = torch.tensor(ni_list, device=device, dtype=torch.float32)
+    if type(input_data) == dict:
+        matrix, ni_list = pad_input_dict(input_data)
+        ni_tensor = torch.tensor(ni_list, device=device, dtype=torch.float32)
 
-    # --------------- Create Mask ---------------------
-    inv_mask = torch.zeros(matrix.shape, device=device, dtype=torch.float32)
-    for i in range(matrix.shape[1]):
-        inv_mask[:ni_list[i],i] = torch.ones(ni_list[i])
-    # -------------------------------------------------
+        # --------------- Create Mask ---------------------
+        inv_mask = torch.zeros(matrix.shape, device=device, dtype=torch.float32)
+        for i in range(matrix.shape[1]):
+            inv_mask[:ni_list[i],i] = torch.ones(ni_list[i])
+        # -------------------------------------------------
+
+    elif type(input_data) == torch.Tensor:
+        matrix = input_data
+        ni_tensor = inv_mask.sum(dim=0)
+        ni_list = ni_tensor.tolist()
+
+
 
     r = matrix.shape[1]  # No of Columns
     critmu = torch.tensor([])
@@ -297,7 +326,7 @@ def load_matrix_debug(mat_tuple, is_dict):
 # mat_tuple = ("./matrices/matrix_1.pkl", "./matrices/matrix_2.pkl", "./matrices/matrix_3.pkl", \
 #              "./matrices/matrix_4.pkl")
 # in_dict = load_matrix_debug(mat_tuple, is_dict=True)
-# in_mat = load_matrix_debug(mat_tuple, is_dict=False)
+# # in_mat = load_matrix_debug(mat_tuple, is_dict=False)
 # # ## ********************************************************************************** ##
 
 # start_time = time.time()
