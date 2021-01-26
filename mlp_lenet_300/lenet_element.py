@@ -76,6 +76,8 @@ if use_cuda:
     torch.cuda.manual_seed(args.seed)
 else:
     print('Not using CUDA!!!')
+print(f"All the arguments used are: {args}")
+
 
 # Loader
 kwargs = {'num_workers': 10, 'pin_memory': False} if use_cuda else {}
@@ -124,8 +126,8 @@ def train(epochs, threshold=0.0):
             optimizer.step()
 
             if (itr % args.gsp_int == 0) and epoch <= (args.epochs - args.gsp_pre_stop):
-                # sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
-                sps_tools.apply_concat_gsp(model, args.sps)
+                sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
+                # sps_tools.apply_concat_gsp(model, args.sps)
                 
                 last_gsp_itr = itr
 
@@ -162,11 +164,19 @@ if args.pretrained:
 
 # Initial training
 print("--- Initial training ---")
-train(args.epochs, threshold=0.0)
-accuracy = test()
 
-# torch.save(model.state_dict(), 'saves/S'+str(args.sps)+'/'+str(args.sps)+'_2_'+str(args.gsp)+'.pth')
-torch.save(model.state_dict(), 'saves/2021/padded/S'+str(args.sps)+'.pth')
+start_time = time.time()
+train(args.epochs, threshold=0.0)
+wall_time_train = (round(time.time() - start_time, 2))
+
+print(f"Wall-time for training: {wall_time_train} seconds")
+
+test_start_time = time.time()
+accuracy = test()
+wall_time_test = (round(time.time() - test_start_time, 2))
+print(f"Wall-time for Testing: {wall_time_test} seconds")
+
+torch.save(model.state_dict(), 'saves/2021/multi_runs/S'+str(args.sps)+ '_seed_' + str(args.seed) +'.pth')
 
 
 util.log(args.log, f"initial_accuracy {accuracy}")

@@ -20,7 +20,7 @@ import utils_gsp.padded_gsp as gsp_global
 import utils_gsp.gpu_projection as gsp_gpu
 
 
-logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
+# logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 
 # Select Device
 use_cuda = torch.cuda.is_available()
