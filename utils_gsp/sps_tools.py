@@ -18,13 +18,51 @@ import sys
 sys.path.append('../')
 import utils_gsp.padded_gsp as gsp_global
 import utils_gsp.gpu_projection as gsp_gpu
-
+import os
 
 # logging.basicConfig(filename = 'logElem.log' , level=logging.DEBUG)
 
 # Select Device
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else 'cpu')
+
+## ================================================================================================= ##
+# --------------------------------------------- LOGGER ---------------------------------------------- #
+def create_logger(log_dir, logfile_name, if_stream = True):
+    
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # ----------------------------------------------------------------------
+    logger_name = logfile_name
+
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(levelname)s:%(name)s:     :%(message)s')
+
+    logger_path = log_dir + logger_name + '.log'
+
+    file_handler = logging.FileHandler(logger_path)
+    
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    if if_stream:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+    return logger
+
+
+def print_model_parameters(model, logger, with_values=False):
+    logger.info(f"{'Param name':20} {'Shape':30} {'Type':15}")
+    logger.info('-'*70)
+    for name, param in model.named_parameters():
+        logger.info(f'{name:20} {str(param.shape):30} {str(param.dtype):15}')
+        if with_values:
+            logger.info(param)
 
 
 #======================================================================================================
