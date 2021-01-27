@@ -154,21 +154,19 @@ def train(epochs, threshold=0.0):
             total_loss.backward()
             optimizer.step()
 
-            if (itr % args.gsp_int == 0) and epoch <= (args.epochs - args.gsp_pre_stop):
+            if (batch_idx % args.gsp_int == 0) and epoch <= (args.epochs - args.gsp_pre_stop):
                 sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
                 # sps_tools.apply_concat_gsp(model, args.sps)
-                
-                last_gsp_itr = itr
+                last_gsp_itr = batch_idx
 
             if batch_idx % args.log_interval == 0:
                 done = batch_idx * len(data)
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f"Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} \
                     ({percentage:3.0f}%)]  Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']} \
-                         GSP itr: {itr}  sps: {args.sps:.2f}")
+                         GSP itr: {last_gsp_itr}  sps: {args.sps:.2f}")
                 
-                epoch_logger.info(f"Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)] Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']} GSP itr: {itr}  sps: {args.sps:.2f}")
-            itr += 1
+                epoch_logger.info(f"Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)] Loss: {loss.item():.3f}  LR: {optimizer.param_groups[0]['lr']} GSP itr: {last_gsp_itr}  sps: {args.sps:.2f}")
         scheduler.step()
         
         # Keep Track of best model

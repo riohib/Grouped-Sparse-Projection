@@ -46,16 +46,27 @@ args = parser.parse_args()
 # Control Seed
 torch.manual_seed(args.seed)
 
+# -------------------------- LOGGER ---------------------------------------------------- #
+summary_logger = sps_tools.create_logger(args.log_dir, 'summary')
+epoch_logger = sps_tools.create_logger(args.log_dir, 'training', if_stream = False)
+# -------------------------------------------------------------------------------------- #
+
 # Select Device
 use_cuda = not args.no_cuda and torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else 'cpu')
 if use_cuda:
-    print("Using CUDA!")
+    summary_logger.info("Using CUDA!")
     torch.cuda.manual_seed(args.seed)
 else:
-    print('Not using CUDA!!!')
+    summary_logger.info('Not using CUDA!!!')
 
-print(f"All the arguments used are: {args}")
+
+# Generate arg values for printing with the report:
+summary_logger.info(f"All the arguments used are:")
+for arg in vars(args):
+    summary_logger.info(f"{arg : <20}: {getattr(args, arg)}")
+summary_logger.info("------------------------------------------------------------")
+
 
 # Loader
 kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
@@ -68,6 +79,16 @@ test_loader = torch.utils.data.DataLoader(
     datasets.MNIST('data', train=False, transform=transforms.Compose([
                        transforms.ToTensor()])),
     batch_size=args.test_batch_size, shuffle=False, **kwargs)
+
+#==============================================================================================
+if args.lr_step > args.epochs:
+    is_lro = 'no'
+else:
+    is_lro = 'yes'
+if not os.path.exists(args.save_dir):
+    os.makedirs(args.save_dir)
+save_path = args.save_dir + args.save_filename + '_'+str(args.gsp_int)+ '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
+#==============================================================================================
 
 
 # Define which model to use

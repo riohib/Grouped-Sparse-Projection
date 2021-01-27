@@ -194,8 +194,7 @@ def test():
 
         test_loss /= len(test_loader.dataset)
         accuracy = 100. * correct / len(test_loader.dataset)
-        print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} \
-                    ({accuracy:.2f}%)')
+        epoch_logger.info(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
     return accuracy, test_loss, correct
 
 def test_best(model_path, model):
@@ -213,8 +212,7 @@ def test_best(model_path, model):
 
         test_loss /= len(test_loader.dataset)
         accuracy = 100. * correct / len(test_loader.dataset)
-        summary_logger.info(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} \
-                    ({accuracy:.2f}%)')
+        summary_logger.info(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
     return accuracy, test_loss, correct
 
 def save_model_checkpoint(model, epoch, loss, PATH):
@@ -238,6 +236,9 @@ if args.pretrained:
     accuracy = test()
 
 # Initial training
+accuracy, _, _ = test()
+summary_logger.info(f" Accuracy of Pretrained Model: {accuracy}")
+
 summary_logger.info("--- Initial training ---")
 train(args.epochs, threshold=0.0)
 

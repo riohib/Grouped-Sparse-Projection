@@ -38,7 +38,7 @@ def create_logger(log_dir, logfile_name, if_stream = True):
 
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(levelname)s:%(name)s:     :%(message)s')
+    formatter = logging.Formatter('%(levelname)s:%(name)s:     %(message)s')
 
     logger_path = log_dir + logger_name + '.log'
 
