@@ -11,9 +11,15 @@ from torchvision import datasets, transforms
 from tqdm import tqdm
 
 from net.models import LeNet
-import util
 
 os.makedirs('saves', exist_ok=True)
+
+import sys
+sys.path.append("../")
+import utils_gsp.gpu_projection as gsp_gpu
+import utils_gsp.padded_gsp as gsp_model
+import utils_gsp.sps_tools as sps_tools
+
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST pruning from deep compression paper')
@@ -33,10 +39,17 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 parser.add_argument('--seed', type=int, default=12345678, metavar='S',
                     help='random seed (default: 42)')
+
 parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
-parser.add_argument('--log', type=str, default='log.txt',
+parser.add_argument('--log-dir', type=str, default='.logs/',
                     help='log file name')
+parser.add_argument('--log-file', type=str, default='',
+                    help='log file name')
+
+parser.add_argument('--save-dir', type=str, default='./tuned/',
+                    help='the path to the model saved after training.')
+
 parser.add_argument('--model', type=str, default='saves/initial_model',
                     help='path to model pretrained with sparsity-inducing regularizer')                    
 parser.add_argument('--sensitivity', type=float, default=0.25,
@@ -87,26 +100,29 @@ else:
     is_lro = 'yes'
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
-save_path = args.save_dir + args.save_filename + '_'+str(args.gsp_int)+ '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
+save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
 #==============================================================================================
 
 
-# Define which model to use
-model = LeNet(mask=False).to(device)
+# # Define which model to use
+# model = LeNet(mask=False).to(device)
 
-# NOTE : `weight_decay` term denotes L2 regularization loss term
-optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-initial_optimizer_state_dict = optimizer.state_dict()
+# # NOTE : `weight_decay` term denotes L2 regularization loss term
+# optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+# initial_optimizer_state_dict = optimizer.state_dict()
 
-def train(epochs):
+def train(epochs, model, optimizer):
     best = 0.0
+    accuracy_dict = {}
+
     pbar = tqdm(range(epochs), total=epochs)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
     for epoch in pbar:
         accuracy = test()
         if accuracy > best:
             best = accuracy
-            torch.save(model.state_dict(), args.model+'_V_'+str(args.sensitivity)+'.pth')
+            torch.save(model.state_dict(), save_path)
+            accuracy_dict[epoch] = best 
             
         model.train()    
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -132,8 +148,12 @@ def train(epochs):
                 done = batch_idx * len(data)
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
+                epoch_logger.info(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
         scheduler.step()
-    print(f'Accuracy: {best:.2f}%')
+    
+    summary_logger.info(f"Accuracy list of Best Epochs: {accuracy_dict}")
+    summary_logger.info(f'Accuracy: {best:.2f}%')
+
 
 def test():
     model.eval()
@@ -152,11 +172,26 @@ def test():
         #print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
     return accuracy
 
+def load_checkpoint(PATH):
+    model = LeNet(mask=False).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    initial_optimizer_state_dict = optimizer.state_dict()
 
-model.load_state_dict(torch.load(args.model+'.pth'))
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    return model, optimizer
+
+
+# ===================================================================================================
+
+model, optimizer = load_checkpoint(args.model+'.pth')
+summary_logger.info(f"Accuracy of the loaded model: {test()}")
+
 
 # Initial training
-print("--- Pruning ---")
+summary_logger.info(" ------------ Pruning ------------ ")
+
+# Pruning of the model
 for name, p in model.named_parameters():
     if 'mask' in name:
         continue
@@ -166,11 +201,13 @@ for name, p in model.named_parameters():
     new_mask = np.where(abs(tensor) < threshold, 0, tensor)
     p.data = torch.from_numpy(new_mask).to(device)
 
+# Test After Pruned 
 accuracy = test()
-util.print_nonzeros(model)
+summary_logger.info(f"Base Accuracy of model after Pruning: {test()}")
+sps_tools.print_nonzeros(model, logger=summary_logger)
 
-print("------------ Finetuning ------------")
-print(f"--------- sensitivity: {args.sensitivity} ---------")
-train(args.epochs)
-util.print_nonzeros(model)
+# Finetuning of the model
+summary_logger.info(" ------------ Finetuning ------------ ")
+train(args.epochs, model, optimizer)
+sps_tools.print_nonzeros(model, logger=summary_logger)
 

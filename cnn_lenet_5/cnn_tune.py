@@ -15,6 +15,12 @@ import util
 
 os.makedirs('saves', exist_ok=True)
 
+import sys
+sys.path.append("../")
+import utils_gsp.gpu_projection as gsp_gpu
+import utils_gsp.padded_gsp as gsp_model
+import utils_gsp.sps_tools as sps_tools
+
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST pruning from deep compression paper')
 parser.add_argument('--batch-size', type=int, default=100, metavar='N',
@@ -33,10 +39,17 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 parser.add_argument('--seed', type=int, default=12345678, metavar='S',
                     help='random seed (default: 42)')
+
 parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
-parser.add_argument('--log', type=str, default='log.txt',
+parser.add_argument('--log-dir', type=str, default='.logs/',
                     help='log file name')
+parser.add_argument('--log-file', type=str, default='',
+                    help='log file name')
+
+parser.add_argument('--save-dir', type=str, default='./tuned/',
+                    help='the path to the model saved after training.')
+
 parser.add_argument('--model', type=str, default='saves/initial_model',
                     help='path to model pretrained with sparsity-inducing regularizer')                    
 parser.add_argument('--sensitivity', type=float, default=0.25,
@@ -46,16 +59,27 @@ args = parser.parse_args()
 # Control Seed
 torch.manual_seed(args.seed)
 
+# -------------------------- LOGGER ---------------------------------------------------- #
+summary_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_summary')
+epoch_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_training', if_stream = False)
+# -------------------------------------------------------------------------------------- #
+
 # Select Device
 use_cuda = not args.no_cuda and torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else 'cpu')
 if use_cuda:
-    print("Using CUDA!")
+    summary_logger.info("Using CUDA!")
     torch.cuda.manual_seed(args.seed)
 else:
-    print('Not using CUDA!!!')
+    summary_logger.info('Not using CUDA!!!')
 
-# Loader
+# Generate arg values for printing with the report:
+summary_logger.info(f"All the arguments used are:")
+for arg in vars(args):
+    summary_logger.info(f"{arg : <20}: {getattr(args, arg)}")
+summary_logger.info("------------------------------------------------------------")
+
+# ------------------------------ Loader ------------------------------ #
 kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
 train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('data', train=True, download=True,
@@ -67,23 +91,37 @@ test_loader = torch.utils.data.DataLoader(
                        transforms.ToTensor()])),
     batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
+#==============================================================================================
+if args.lr_step > args.epochs:
+    is_lro = 'no'
+else:
+    is_lro = 'yes'
 
-# Define which model to use
-model = LeNet(mask=False).to(device)
+if not os.path.exists(args.save_dir):
+    os.makedirs(args.save_dir)
 
-# NOTE : `weight_decay` term denotes L2 regularization loss term
-optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-initial_optimizer_state_dict = optimizer.state_dict()
+save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
+#==============================================================================================
 
-def train(epochs):
+# # Define which model to use
+# model = LeNet(mask=False).to(device)
+
+# # NOTE : `weight_decay` term denotes L2 regularization loss term
+# optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+# initial_optimizer_state_dict = optimizer.state_dict()
+
+def train(epochs, model, optimizer):
     best = 0.0
+    accuracy_dict = {}
     pbar = tqdm(range(epochs), total=epochs)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
+
     for epoch in pbar:
         accuracy = test()
         if accuracy > best:
             best = accuracy
-            torch.save(model.state_dict(), args.model+'_V_'+str(args.sensitivity)+'.pth')
+            torch.save(model.state_dict(), save_path)
+            accuracy_dict[epoch] = best 
             
         model.train()    
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -109,8 +147,11 @@ def train(epochs):
                 done = batch_idx * len(data)
                 percentage = 100. * batch_idx / len(train_loader)
                 pbar.set_description(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
+                epoch_logger.info(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
         scheduler.step()
-    print(f'Accuracy: {best:.2f}%')
+
+    summary_logger.info(f"Accuracy list of Best Epochs: {accuracy_dict}")
+    summary_logger.info(f'Accuracy: {best:.2f}%')
 
 def test():
     model.eval()
@@ -129,23 +170,41 @@ def test():
         #print(f'Test set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
     return accuracy
 
+def load_checkpoint(PATH):
+    # Define which model to use
+    model = LeNet(mask=False).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    initial_optimizer_state_dict = optimizer.state_dict()
 
-model.load_state_dict(torch.load(args.model+'.pth', map_location = device))
-# Initial training
-print("--- Pruning ---")
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    return model, optimizer
+
+# ===================================================================================================
+model, optimizer = load_checkpoint(args.model+'.pth')
+summary_logger.info(f"Accuracy of the loaded model: {test()}")
+
+
+summary_logger.info(" ------------ Pruning ------------ ")
+
+# Prune the Model
 for name, p in model.named_parameters():
     if 'mask' in name:
         continue
     tensor = p.data.cpu().numpy()
     threshold = args.sensitivity*np.std(tensor)
-    print(f'Pruning with threshold : {threshold} for layer {name}')
+    summary_logger.info(f'Pruning with threshold : {threshold} for layer {name}')
     new_mask = np.where(abs(tensor) < threshold, 0, tensor)
     p.data = torch.from_numpy(new_mask).to(device)
 
+# Test After Pruned 
 accuracy = test()
-util.print_nonzeros(model)
+summary_logger.info(f"Base Accuracy of model after Pruning: {test()}")
 
-print("--- Finetuning ---")
-train(args.epochs)
-util.print_nonzeros(model)
+sps_tools.print_nonzeros(model, logger=summary_logger)
+
+# Fine Tune Model
+summary_logger.info(" ------------ Finetuning ------------ ")
+train(args.epochs, model, optimizer)
+sps_tools.print_nonzeros(model, logger=summary_logger)
 

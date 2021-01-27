@@ -177,7 +177,8 @@ def train(epochs, threshold=0.0):
             save_model_checkpoint(model, epoch, loss, PATH=save_path)
 
         scheduler.step()
-
+        
+    summary_logger.info(f"Accuracy list: {accuracy_list}")
 
 # ===================================== TESTING ======================================= #
 def test():

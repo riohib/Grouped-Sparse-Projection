@@ -117,7 +117,7 @@ else:
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
 
-save_path = args.save_dir + args.save_filename + '_'+str(args.gsp_int)+ '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
+save_path = args.save_dir + args.save_filename + '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
 
 #==============================================================================================
 # Define which model to use
@@ -240,5 +240,5 @@ if args.pretrained:
 summary_logger.info("--- Initial training ---")
 train(args.epochs, threshold=0.0)
 
-accuracy, test_loss, correct = test_best(save_path, model)
+accuracy, test_loss, correct = test_best(save_path)
 

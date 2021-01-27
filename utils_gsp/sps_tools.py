@@ -42,6 +42,8 @@ def create_logger(log_dir, logfile_name, if_stream = True):
 
     logger_path = log_dir + logger_name + '.log'
 
+    print(logger_path)
+
     file_handler = logging.FileHandler(logger_path)
     
     file_handler.setLevel(logging.INFO)
@@ -63,6 +65,31 @@ def print_model_parameters(model, logger, with_values=False):
         logger.info(f'{name:20} {str(param.shape):30} {str(param.dtype):15}')
         if with_values:
             logger.info(param)
+
+
+def print_nonzeros(model, logger):
+    nonzero = total = 0
+    for name, p in model.named_parameters():
+        if 'mask' in name:
+            continue
+        tensor = p.data.cpu().numpy()
+        nz_count = np.count_nonzero(tensor)
+        total_params = np.prod(tensor.shape)
+        nonzero += nz_count
+        total += total_params
+        logger.info(f'{name:20} | nonzeros = {nz_count:7} / {total_params:7} ({100 * nz_count / total_params:6.2f}%) | total_pruned = {total_params - nz_count :7} | shape = {tensor.shape}')
+        if 'weight' in name:
+            tensor = np.abs(tensor)
+            if 'conv' in name:
+                dim0 = np.sum(np.sum(tensor, axis=0),axis=(1,2))
+                dim1 = np.sum(np.sum(tensor, axis=1),axis=(1,2))
+            if 'fc' in name:
+                dim0 = np.sum(tensor, axis=0)
+                dim1 = np.sum(tensor, axis=1)
+            nz_count0 = np.count_nonzero(dim0)
+            nz_count1 = np.count_nonzero(dim1)
+            logger.info(f'{name:20} | dim0 = {nz_count0:7} / {len(dim0):7} ({100 * nz_count0 / len(dim0):6.2f}%) | dim1 = {nz_count1:7} / {len(dim1):7} ({100 * nz_count1 / len(dim1):6.2f}%)')
+    logger.info(f'alive: {nonzero}, pruned : {total - nonzero}, total: {total}, Compression rate : {total/nonzero:10.2f}x  ({100 * (total-nonzero) / total:6.2f}% pruned)')
 
 
 #======================================================================================================
