@@ -243,6 +243,28 @@ def cnn_layer_Ploter(model, title):
 # (utilizing dict data structures). These functions however simply create a tensor and passes to
 # padded GSP.
 
+def get_shape_l(model):
+    """
+    Get's the model layer shape tuples for LeNet 300 100 and LeNet*5 models.
+    """
+    params_d = {}
+    weight_d = {}
+    shape_list = []
+    counter = 0
+    for name, param in model.named_parameters(): 
+        if 'weight' in name:
+            shape_list.append(param.data.shape)    
+            if param.dim() > 2:  
+                w_shape = param.shape
+                dim_1 = w_shape[0] * w_shape[1]
+                weight_d[counter] = param.detach().view(dim_1,-1)
+            else:
+                weight_d[counter] = param.detach()
+            counter += 1
+    shape_l = [tuple(x.shape) for x in weight_d.values()]
+    return shape_l
+
+
 def apply_concat_gsp(model, sps):
     matrix, val_mask, shape_l = concat_nnlayers(model)
     try:
@@ -256,12 +278,10 @@ def apply_concat_gsp(model, sps):
     return xp_mat, ni_list
 
 def concat_nnlayers(model):
-    shape_l = []
-    for i, (name, param) in enumerate(model.named_parameters()):
-        if 'weight' in name:
-            shape_l.append(tuple(param.shape)) 
+
+    shape_l = get_shape_l(model)
     
-    max_dim0 = sum([x[0] for x in shape_l])
+    max_dim0 = max([x[0] for x in shape_l])
     max_dim1 = sum([x[1] for x in shape_l])
     
     matrix = torch.zeros(max_dim0, max_dim1, device=device)
@@ -449,7 +469,7 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
     params_d = {}
     weight_d = {}
     shape_list = []
-    counter = 0
+    # counter = 0
 
     for name, param in model.named_parameters(): 
         params_d[name] = param
@@ -458,8 +478,8 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
             weight_d[name] = param  
             w_shape = param.shape
             dim_1 = w_shape[0] * w_shape[1]
-            weight_d[counter] = param.detach().view(dim_1,-1)
-            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+            weight_d[name] = param.detach().view(dim_1,-1)
+            param.data = gsp_func.groupedsparseproj(weight_d[name], sps).view(w_shape)
 
 
 # def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):

@@ -24,6 +24,7 @@ sys.path.append("../")
 import utils_gsp.gpu_projection as gsp_gpu
 import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
+import utils_gsp.cnn_tools as cnn_tools
 
 
 os.makedirs('saves', exist_ok=True)
@@ -118,7 +119,7 @@ else:
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
 
-save_path = args.save_dir + args.save_filename + '_'+str(args.gsp_int)+ '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
+save_path = args.save_dir + args.save_filename + '_'+str(args.seed)+'.pth'
 
 
 #==============================================================================================
@@ -156,7 +157,8 @@ def train(epochs, threshold=0.0):
 
             # Projection using GSP
             if (batch_idx % args.gsp_int == 0) and epoch <= (args.epochs - args.gsp_pre_stop):
-                sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
+                # sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
+                cnn_tools.apply_concat_gsp(model, args.sps)
                 last_gsp_itr = batch_idx
             
             if batch_idx % args.log_interval == 0:
@@ -234,7 +236,7 @@ def load_checkpoint(PATH):
 # ===============================================================================================
 if args.pretrained:
     model.load_state_dict(torch.load(args.pretrained + '.pth'))
-    accuracy = test()
+    accuracy, _, _ = test()
 
 # Initial training
 accuracy, _, _ = test()
