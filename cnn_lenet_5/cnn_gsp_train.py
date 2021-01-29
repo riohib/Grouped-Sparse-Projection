@@ -15,9 +15,7 @@ import scipy.io
 from matplotlib import pyplot as plt
 import logging
 
-
 from net.models import LeNet_5 as LeNet
-import util
 
 import sys
 sys.path.append("../")
@@ -92,7 +90,7 @@ else:
     summary_logger.info('Not using CUDA!!!')
 
 # Generate arg values for printing with the report:
-summary_logger.info(f"All the arguments used are:")
+summary_logger.info(f"All the arguments used are: ")
 for arg in vars(args):
     summary_logger.info(f"{arg : <20}: {getattr(args, arg)}")
 summary_logger.info("------------------------------------------------------------")
@@ -157,8 +155,8 @@ def train(epochs, threshold=0.0):
 
             # Projection using GSP
             if (batch_idx % args.gsp_int == 0) and epoch <= (args.epochs - args.gsp_pre_stop):
-                # sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
-                cnn_tools.apply_concat_gsp(model, args.sps)
+                sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)  # Layerwise GSP
+                # cnn_tools.apply_concat_gsp(model, args.sps)  ## Global concatenated GSP
                 last_gsp_itr = batch_idx
             
             if batch_idx % args.log_interval == 0:

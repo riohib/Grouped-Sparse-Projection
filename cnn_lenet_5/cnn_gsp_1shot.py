@@ -10,9 +10,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from net.models import LeNet
-import util
-
+from net.models import LeNet_5 as LeNet
 
 import sys
 sys.path.append("../")
@@ -32,9 +30,9 @@ parser.add_argument('--epochs', type=int, default=50, metavar='N',
                     help='number of epochs to train (default: 100)')
 
 parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                    help='learning rate (default: 0.01)')     
+                    help='learning rate (default: 0.01)')                
 parser.add_argument('--lr-step', type=int, default=75, metavar='LR-STEP',
-                    help='learning rate (default: 75)')     
+                    help='learning rate (default: 75)')          
 
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
@@ -49,8 +47,10 @@ parser.add_argument('--model', type=str, default='saves/initial_model',
 parser.add_argument('--sensitivity', type=float, default=0.25,
                     help="pruning threshold computed as sensitivity value multiplies to layer's std")
 
-parser.add_argument('--sps', type=float, default=0.97, metavar='SPS',
-                    help='gsp sparsity value (default: 0.95)')
+parser.add_argument('--sps', type=float, default=0.98, metavar='SPS',
+                    help='gsp sparsity value (default: 0.98)')
+
+
 args = parser.parse_args()
 
 # Control Seed
@@ -142,39 +142,11 @@ def test():
     return accuracy
 
 
-# def create_logger(gpu_id):
-#     # ----------------------------------------------------------------------
-#     logger_name = "single_shot"
-
-#     logger = logging.getLogger(logger_name)
-#     logger.setLevel(logging.DEBUG)
-
-#     formatter = logging.Formatter('%(levelname)s:%(name)s:%(message)s')
-
-#     log_dir = "./logs"
-#     logger_path = './logs/single_shot.log'
-    
-#     if not os.path.exists(logger_path):
-#         os.makedirs(logger_path)
-    
-#     file_handler = logging.FileHandler(logger_path)
-    
-#     file_handler.setLevel(logging.INFO)
-#     file_handler.setFormatter(formatter)
-
-#     stream_handler = logging.StreamHandler()
-#     stream_handler.setFormatter(formatter)
-
-#     logger.addHandler(file_handler)
-#     logger.addHandler(stream_handler)
-
-#     return logger
-
-
-model.load_state_dict(torch.load(args.model+'.pth'))
+model.load_state_dict(torch.load(args.model+'.pth', map_location = device))
 
 # Prune Using GSP
 sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
+
 
 # Initial training
 print("--- Pruning ---")
@@ -190,8 +162,7 @@ for name, p in model.named_parameters():
 accuracy = test()
 util.print_nonzeros(model)
 
-print("------------ Finetuning ------------")
-print(f"--------- sensitivity: {args.sensitivity} ---------")
+print("--- Finetuning ---")
 train(args.epochs)
 util.print_nonzeros(model)
 

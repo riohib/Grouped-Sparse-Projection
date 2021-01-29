@@ -12,14 +12,13 @@ from tqdm import tqdm
 
 from net.models import LeNet
 
-os.makedirs('saves', exist_ok=True)
-
 import sys
 sys.path.append("../")
 import utils_gsp.gpu_projection as gsp_gpu
-import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
 
+
+os.makedirs('saves', exist_ok=True)
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST pruning from deep compression paper')
@@ -40,20 +39,25 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--seed', type=int, default=12345678, metavar='S',
                     help='random seed (default: 42)')
 
-parser.add_argument('--log-interval', type=int, default=100, metavar='N',
-                    help='how many batches to wait before logging training status')
-parser.add_argument('--log-dir', type=str, default='.logs/',
-                    help='log file name')
-parser.add_argument('--log-file', type=str, default='',
-                    help='log file name')
-
-parser.add_argument('--save-dir', type=str, default='./tuned/',
-                    help='the path to the model saved after training.')
-
 parser.add_argument('--model', type=str, default='saves/initial_model',
                     help='path to model pretrained with sparsity-inducing regularizer')                    
 parser.add_argument('--sensitivity', type=float, default=0.25,
                     help="pruning threshold computed as sensitivity value multiplies to layer's std")
+
+parser.add_argument('--log-interval', type=int, default=100, metavar='N',
+                    help='how many batches to wait before logging training status')
+parser.add_argument('--log-dir', type=str, default='.logs/',
+                    help='log file name')
+parser.add_argument('--log', type=str, default='log.txt',
+                    help='log file name')
+
+parser.add_argument('--save-dir', type=str, default='./saves/',
+                    help='the path to the model saved after training.')
+parser.add_argument('--save-filename', type=str, default='gsp',
+                    help='the path to the model saved after training.')  
+
+parser.add_argument('--sps', type=float, default=0.97, metavar='SPS',
+                    help='gsp sparsity value (default: 0.95)')
 args = parser.parse_args()
 
 # Control Seed
@@ -73,13 +77,12 @@ if use_cuda:
 else:
     summary_logger.info('Not using CUDA!!!')
 
-
 # Generate arg values for printing with the report:
 summary_logger.info(f"All the arguments used are:")
 for arg in vars(args):
     summary_logger.info(f"{arg : <20}: {getattr(args, arg)}")
 summary_logger.info("------------------------------------------------------------")
-
+# -------------------------------------------------------------------------------------- #
 
 # Loader
 kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
@@ -104,14 +107,7 @@ save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
 #==============================================================================================
 
 
-# # Define which model to use
-# model = LeNet(mask=False).to(device)
-
-# # NOTE : `weight_decay` term denotes L2 regularization loss term
-# optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-# initial_optimizer_state_dict = optimizer.state_dict()
-
-def train(epochs, model, optimizer):
+def train(epochs):
     best = 0.0
     accuracy_dict = {}
 
@@ -122,7 +118,7 @@ def train(epochs, model, optimizer):
         if accuracy > best:
             best = accuracy
             torch.save(model.state_dict(), save_path)
-            accuracy_dict[epoch] = best 
+            accuracy_dict[epoch] = best
             
         model.train()    
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -154,7 +150,6 @@ def train(epochs, model, optimizer):
     summary_logger.info(f"Accuracy list of Best Epochs: {accuracy_dict}")
     summary_logger.info(f'Accuracy: {best:.2f}%')
 
-
 def test():
     model.eval()
     test_loss = 0
@@ -178,36 +173,36 @@ def load_checkpoint(PATH):
     initial_optimizer_state_dict = optimizer.state_dict()
 
     checkpoint = torch.load(PATH)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint)
     return model, optimizer
-
 
 # ===================================================================================================
 
+# Load the Model
 model, optimizer = load_checkpoint(args.model+'.pth')
 summary_logger.info(f"Accuracy of the loaded model: {test()}")
 
 
-# Initial training
-summary_logger.info(" ------------ Pruning ------------ ")
+# Prune Using GSP
+summary_logger.info(" ------------ Pruning with GSP ------------ ")
+sps_tools.apply_gsp(model, args.sps, gsp_func = gsp_gpu)
 
-# Pruning of the model
+# Initial training
+summary_logger.info(" -------------- Pruning ---------------- ")
 for name, p in model.named_parameters():
     if 'mask' in name:
         continue
     tensor = p.data.cpu().numpy()
     threshold = args.sensitivity*np.std(tensor)
-    print(f'Pruning with threshold : {threshold} for layer {name}')
+    summary_logger.info(f'Pruning with threshold : {threshold} for layer {name}')
     new_mask = np.where(abs(tensor) < threshold, 0, tensor)
     p.data = torch.from_numpy(new_mask).to(device)
 
-# Test After Pruned 
 accuracy = test()
-summary_logger.info(f"Base Accuracy of model after Pruning: {test()}")
 sps_tools.print_nonzeros(model, logger=summary_logger)
 
-# Finetuning of the model
-summary_logger.info(" ------------ Finetuning ------------ ")
-train(args.epochs, model, optimizer)
+summary_logger.info("------------ Finetuning ------------")
+summary_logger.info(f"--------- sensitivity: {args.sensitivity} ---------")
+train(args.epochs)
 sps_tools.print_nonzeros(model, logger=summary_logger)
 

@@ -271,13 +271,16 @@ def groupedsparseproj(input_data, inv_mask, sps, precision=1e-6, linrat=0.9):
         except:
             # pdb.set_trace()
             var_dict = {}
-            var_dict['in_dict'] = in_dict
+            if type(input_data) == dict:
+                var_dict['in_dict'] = input_data
+            else:
+                var_dict['in_mat'] = input_data
             var_dict['gnew'] = gnew
             var_dict['k'] = k
             var_dict['precision'] = precision
             var_dict['r'] = r
             var_dict['numiter'] = numiter
-            with open('var_dict.pickle', 'wb') as handle:
+            with open('problem_matrix_dict.pickle', 'wb') as handle:
                 pickle.dump(var_dict, handle)
 
         gxpmu = gnew

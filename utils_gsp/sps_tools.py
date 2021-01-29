@@ -169,7 +169,7 @@ def apply_gsp(model, sps, gsp_func = gsp_gpu):
     """
     This function is for applying GSP layer-wise in a CNN or MLP or Resnet network in this repo.
     The GSP is applied layer-wise separately.
-    """
+    """ 
     weight_d = {}
     shape_list = []
     counter = 0

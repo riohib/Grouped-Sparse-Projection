@@ -10,8 +10,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from net.models import LeNet_5 as LeNet
-import util
+from net.models import LeNet
 
 os.makedirs('saves', exist_ok=True)
 
@@ -20,6 +19,7 @@ sys.path.append("../")
 import utils_gsp.gpu_projection as gsp_gpu
 import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
+
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST pruning from deep compression paper')
@@ -31,9 +31,9 @@ parser.add_argument('--epochs', type=int, default=50, metavar='N',
                     help='number of epochs to train (default: 100)')
 
 parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                    help='learning rate (default: 0.01)')                
+                    help='learning rate (default: 0.01)')     
 parser.add_argument('--lr-step', type=int, default=75, metavar='LR-STEP',
-                    help='learning rate (default: 75)')          
+                    help='learning rate (default: 75)')     
 
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
@@ -60,8 +60,8 @@ args = parser.parse_args()
 torch.manual_seed(args.seed)
 
 # -------------------------- LOGGER ---------------------------------------------------- #
-summary_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_summary')
-epoch_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_training', if_stream = False)
+summary_logger = sps_tools.create_logger(args.log_dir, 'summary')
+epoch_logger = sps_tools.create_logger(args.log_dir, 'training', if_stream = False)
 # -------------------------------------------------------------------------------------- #
 
 # Select Device
@@ -73,13 +73,15 @@ if use_cuda:
 else:
     summary_logger.info('Not using CUDA!!!')
 
+
 # Generate arg values for printing with the report:
 summary_logger.info(f"All the arguments used are:")
 for arg in vars(args):
     summary_logger.info(f"{arg : <20}: {getattr(args, arg)}")
 summary_logger.info("------------------------------------------------------------")
 
-# ------------------------------ Loader ------------------------------ #
+
+# Loader
 kwargs = {'num_workers': 5, 'pin_memory': True} if use_cuda else {}
 train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('data', train=True, download=True,
@@ -96,12 +98,11 @@ if args.lr_step > args.epochs:
     is_lro = 'no'
 else:
     is_lro = 'yes'
-
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
-
 save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
 #==============================================================================================
+
 
 # # Define which model to use
 # model = LeNet(mask=False).to(device)
@@ -113,9 +114,9 @@ save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
 def train(epochs, model, optimizer):
     best = 0.0
     accuracy_dict = {}
+
     pbar = tqdm(range(epochs), total=epochs)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
-
     for epoch in pbar:
         accuracy = test()
         if accuracy > best:
@@ -135,12 +136,10 @@ def train(epochs, model, optimizer):
 
             # zero-out all the gradients corresponding to the pruned connections
             for name, p in model.named_parameters():
-                if 'mask' in name:
-                    continue
-                tensor = p.data.cpu().numpy()
-                grad_tensor = p.grad.data.cpu().numpy()
-                grad_tensor = np.where(tensor==0, 0, grad_tensor)
-                p.grad.data = torch.from_numpy(grad_tensor).to(device)
+                tensor = p.data
+                grad_tensor = p.grad.data
+                grad_tensor = torch.where(tensor==0, torch.tensor(0.0, device=device), grad_tensor)
+                p.grad.data = grad_tensor
 
             optimizer.step()
             if batch_idx % args.log_interval == 0:
@@ -149,9 +148,10 @@ def train(epochs, model, optimizer):
                 pbar.set_description(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
                 epoch_logger.info(f'Best: {best:.2f}% Train Epoch: {epoch} [{done:5}/{len(train_loader.dataset)} ({percentage:3.0f}%)]  Loss: {loss.item():.6f} Total: {total_loss.item():.6f}')
         scheduler.step()
-
+    
     summary_logger.info(f"Accuracy list of Best Epochs: {accuracy_dict}")
     summary_logger.info(f'Accuracy: {best:.2f}%')
+
 
 def test():
     model.eval()
@@ -171,7 +171,6 @@ def test():
     return accuracy
 
 def load_checkpoint(PATH):
-    # Define which model to use
     model = LeNet(mask=False).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     initial_optimizer_state_dict = optimizer.state_dict()
@@ -180,30 +179,30 @@ def load_checkpoint(PATH):
     model.load_state_dict(checkpoint['model_state_dict'])
     return model, optimizer
 
+
 # ===================================================================================================
+
 model, optimizer = load_checkpoint(args.model+'.pth')
 summary_logger.info(f"Accuracy of the loaded model: {test()}")
 
 
+# Initial training
 summary_logger.info(" ------------ Pruning ------------ ")
 
-# Prune the Model
+# Pruning of the model
 for name, p in model.named_parameters():
-    if 'mask' in name:
-        continue
-    tensor = p.data.cpu().numpy()
-    threshold = args.sensitivity*np.std(tensor)
-    summary_logger.info(f'Pruning with threshold : {threshold} for layer {name}')
-    new_mask = np.where(abs(tensor) < threshold, 0, tensor)
-    p.data = torch.from_numpy(new_mask).to(device)
+    tensor = p.data
+    threshold = args.sensitivity * torch.std(tensor)
+    print(f'Pruning with threshold : {threshold} for layer {name}')
+    new_mask = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), tensor)
+    p.data = new_mask
 
 # Test After Pruned 
 accuracy = test()
 summary_logger.info(f"Base Accuracy of model after Pruning: {test()}")
-
 sps_tools.print_nonzeros(model, logger=summary_logger)
 
-# Fine Tune Model
+# Finetuning of the model
 summary_logger.info(" ------------ Finetuning ------------ ")
 train(args.epochs, model, optimizer)
 sps_tools.print_nonzeros(model, logger=summary_logger)

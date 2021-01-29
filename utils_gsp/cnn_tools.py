@@ -11,9 +11,6 @@ from math import gcd
 from functools import reduce
 from operator import mul
 
-# from net.models import LeNet_5 as LeNet
-# import util
-
 import sys
 sys.path.append('../')
 import utils_gsp.padded_gsp as gsp_global
@@ -33,7 +30,14 @@ device = torch.device("cuda" if use_cuda else 'cpu')
 def apply_concat_gsp(model, sps):
     matrix, val_mask, shape_l = concat_nnlayers(model)
     
-    xp_mat, ni_list = gsp_global.groupedsparseproj(matrix, val_mask, sps)
+    try:
+        xp_mat, ni_list = gsp_global.groupedsparseproj(matrix, val_mask, sps)
+    except:
+        output = gsp_global.groupedsparseproj(matrix, val_mask, sps)
+        print(output)
+        print( len(output) )
+        print(type(output))
+
     rebuild_nnlayers(xp_mat, ni_list, shape_l, model)
 
     # return xp_mat, ni_list
