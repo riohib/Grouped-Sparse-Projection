@@ -273,7 +273,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
         
         # sparse-projection
         if (itr % 200 == 0): #gsp every 200 iteration
-            # print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
+            print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
             sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu)
             # sps_tools.gsp_global_apply(model, args.sps, 'resnet-not-bn')
         itr+=1

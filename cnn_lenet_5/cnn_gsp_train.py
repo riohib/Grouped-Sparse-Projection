@@ -138,7 +138,7 @@ def train(epochs, threshold=0.0):
     pbar = tqdm(range(epochs), total=epochs)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
     curves = np.zeros((epochs,14))
-    accuracy_list = []
+    accuracy_dict = {}
     
     for epoch in pbar:
         # print(f" learning rate: {optimizer.param_groups[0]['lr']}")
@@ -170,15 +170,16 @@ def train(epochs, threshold=0.0):
 
         # Keep Track of best model
         accuracy, _ , _ = test()
-        accuracy_list.append(accuracy)
 
         if accuracy > best:
             best = accuracy
             save_model_checkpoint(model, epoch, loss, PATH=save_path)
+            accuracy_dict[epoch] = accuracy
 
         scheduler.step()
         
-    summary_logger.info(f"Accuracy list: {accuracy_list}")
+    summary_logger.info(f"Accuracy list of Best Epochs: {accuracy_dict}")
+    summary_logger.info(f'Accuracy: {best:.2f}%')
 
 # ===================================== TESTING ======================================= #
 def test():

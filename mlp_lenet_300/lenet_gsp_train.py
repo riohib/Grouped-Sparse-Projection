@@ -65,7 +65,7 @@ parser.add_argument('--sps', type=float, default=0.95, metavar='SPS',
 
 parser.add_argument('--save-dir', type=str, default='./saves/',
                     help='the path to the model saved after training.')
-parser.add_argument('--save-filename', type=str, default='gsp',
+parser.add_argument('--save-filename', type=str, default='gsp_model',
                     help='the path to the model saved after training.')  
 
 parser.add_argument('--pretrained', type=str, default='./saves/elt_0.0_0',
@@ -119,7 +119,7 @@ else:
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
 
-save_path = args.save_dir + args.save_filename + '_seed_' + str(args.seed) + 'lro_' + str(is_lro) +'.pth'
+save_path = args.save_dir + args.save_filename +'.pth'
 
 #==============================================================================================
 # Define which model to use
