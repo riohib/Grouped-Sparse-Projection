@@ -98,6 +98,7 @@ parser.add_argument('--savetag', type=str, default='', metavar='SPS',
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
 
+
 # Validate dataset
 assert args.dataset == 'cifar10' or args.dataset == 'cifar100', 'Dataset can only be cifar10 or cifar100.'
 

@@ -7,6 +7,7 @@ import statistics
 import logging
 import pickle
 
+import math
 from math import gcd
 from functools import reduce
 from operator import mul
@@ -92,29 +93,23 @@ def print_nonzeros(model, logger):
     logger.info(f'alive: {nonzero}, pruned : {total - nonzero}, total: {total}, Compression rate : {total/nonzero:10.2f}x  ({100 * (total-nonzero) / total:6.2f}% pruned)')
 
 
-def get_threshold(model, sparsity):
-
+def prune_with_sps(model, sparsity, logger):
     weight_d = {}
     shape_list = []
 
     weight_tensor = torch.empty(0, device=device)
     for name, param in model.named_parameters(): 
-        if 'weight' in name:
-            weight_tensor = torch.cat((weight_tensor, param.data.flatten()) )
+        weight_tensor = torch.cat((weight_tensor, param.data.flatten()))
 
     wpct_val =  len(weight_tensor) * sparsity
     sorted_weights, indices = torch.sort(weight_tensor.abs())
     threshold = sorted_weights[:math.ceil(wpct_val)+1][-1]
-    return threshold
 
-def prune_model(model, threshold):
     for name, p in model.named_parameters():
         tensor = p.data
-    #     threshold = args.sensitivity * torch.std(tensor)
-        print(f'Pruning with threshold : {threshold} for layer {name}')
+        logger.info(f'Pruning with threshold : {threshold} for layer {name}')
         new_mask = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), tensor)
         p.data = new_mask
-
 
 #======================================================================================================
 #====================================== Sparsity Calculator ===========================================

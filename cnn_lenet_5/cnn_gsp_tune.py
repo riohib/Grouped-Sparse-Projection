@@ -48,19 +48,24 @@ parser.add_argument('--log-file', type=str, default='',
 
 parser.add_argument('--save-dir', type=str, default='./tuned/',
                     help='the path to the model saved after training.')
+parser.add_argument('--save-file', type=str, default='tuned',
+                    help='the saved file name.')
 
 parser.add_argument('--model', type=str, default='saves/initial_model',
                     help='path to model pretrained with sparsity-inducing regularizer')                    
 parser.add_argument('--sensitivity', type=float, default=0.25,
                     help="pruning threshold computed as sensitivity value multiplies to layer's std")
+parser.add_argument('--final-sps', type=float, default=0.98,
+                    help="Sets the pruning threshold with the value that results with the desired sps")
+
 args = parser.parse_args()
 
 # Control Seed
 torch.manual_seed(args.seed)
 
 # -------------------------- LOGGER ---------------------------------------------------- #
-summary_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_summary')
-epoch_logger = sps_tools.create_logger(args.log_dir, str(args.sensitivity)+ '_training', if_stream = False)
+summary_logger = sps_tools.create_logger(args.log_dir, args.log_file + 'summary')
+epoch_logger = sps_tools.create_logger(args.log_dir, args.log_file + 'training', if_stream = False)
 # -------------------------------------------------------------------------------------- #
 
 # Select Device
@@ -99,7 +104,7 @@ else:
 if not os.path.exists(args.save_dir):
     os.makedirs(args.save_dir)
 
-save_path = args.save_dir + 'V_'+str(args.sensitivity)+'.pth'
+save_path = args.save_dir + args.save_file +'.pth'
 #==============================================================================================
 
 # # Define which model to use
@@ -171,23 +176,27 @@ def load_checkpoint(PATH):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
     initial_optimizer_state_dict = optimizer.state_dict()
 
-    checkpoint = torch.load(PATH)
+    checkpoint = torch.load(PATH,  map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     return model, optimizer
 
 # ===================================================================================================
+
+# Load Model
 model, optimizer = load_checkpoint(args.model+'.pth')
 summary_logger.info(f"Accuracy of the loaded model: {test()}")
 
 
 summary_logger.info(" ------------ Pruning ------------ ")
+# Prune the model to the desired sparsity in accordance to GSP
+sps_tools.prune_with_sps(model, sparsity=args.final_sps, logger=summary_logger)
 
-# Prune the Model
-for name, p in model.named_parameters():
-    tensor = p.data
-    threshold = args.sensitivity * torch.std(tensor)
-    summary_logger.info(f'Pruning with threshold : {threshold} for layer {name}')
-    p.data = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), tensor)
+# # Prune the Model
+# for name, p in model.named_parameters():
+#     tensor = p.data
+#     threshold = args.sensitivity * torch.std(tensor)
+#     summary_logger.info(f'Pruning with threshold : {threshold} for layer {name}')
+#     p.data = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), tensor)
 
 
 # Test After Pruned 
