@@ -491,13 +491,13 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
 
     for name, param in model.named_parameters(): 
         params_d[name] = param
-        if 'weight' in name and 'module.conv1' not in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
+        if 'weight' in name and 'bn' not in name and 'downsample' not in name and 'fc' not in name:
             shape_list.append(param.data.shape)
             weight_d[name] = param  
             w_shape = param.shape
             dim_1 = w_shape[0] * w_shape[1]
             weight_d[name] = param.detach().view(dim_1,-1)
-            param.data = gsp_func.groupedsparseproj(weight_d[name], sps).view(w_shape)
+            param.data = gsp_func.groupedsparseproj(weight_d[name].T, sps).T.view(w_shape)
 
 
 # def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):
@@ -595,4 +595,4 @@ def gsp_imagenet_partial(model, sps=0.95, gsp_func = gsp_gpu):
             w_shape = param.shape
             dim_1 = w_shape[0] * w_shape[1]
             weight_d[counter] = param.detach().view(dim_1,-1)
-            param.data = gsp_func.groupedsparseproj(weight_d[counter], sps).view(w_shape)
+            param.data = gsp_func.groupedsparseproj(weight_d[counter].T, sps).T.view(w_shape)
