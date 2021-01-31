@@ -17,7 +17,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else 'cpu')
 
 ## -============= Working NOW =============
-# util.print_nonzeros(model)
+
 def get_abs_sps(model):
     nonzero = total = 0
     for name, param in model.named_parameters():
@@ -177,7 +177,6 @@ def put_back_cat(model, cat_weights, dim_list):
             ctr += 1
 
 def prune_resnet_sps(model, target_sps):
-
     concat_info_d  = get_concat_filters(model)
     threshold = get_threshold_bisection(concat_info_d, target_sps=target_sps, epsilon =  0.00001)
 
@@ -187,5 +186,4 @@ def prune_resnet_sps(model, target_sps):
                                     concat_info_d)
 
     put_back_cat(model, cat_w_prn, concat_info_d['dim_list'])
-
     print( f" The total model sparsity is: get_abs_sps(model)")
