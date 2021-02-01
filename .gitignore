@@ -10,6 +10,7 @@ cnn_lenet_5/old_LeNet5.py
 /mlp_lenet_300/gsp_models_trained
 
 cifar/data/
+cifar/post_utils/data
 
 imagenet/archived-results
 imagenet/results

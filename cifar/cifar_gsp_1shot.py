@@ -90,7 +90,10 @@ parser.add_argument('--gpu-id', default='0', type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
 
 parser.add_argument('--sps', type=float, default=0.99, metavar='SPS',
-                    help='gsp sparsity value (default: 0.95)')
+                    help='gsp sparsity value (default: 0.99)')
+parser.add_argument('--filterwise', type=str, default='Yes', metavar='FW',
+                    help='gsp along the filters')
+
 parser.add_argument('--save-dir', type=str, default='./saves/',
                     help='the path to the model saved after training.')
 
@@ -106,6 +109,26 @@ assert args.dataset == 'cifar10' or args.dataset == 'cifar100', 'Dataset can onl
 # Use CUDA
 #os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 use_cuda = torch.cuda.is_available()
+
+if args.filterwise == 'Yes':
+    print("in the True Region")
+    is_fw = True
+elif args.filterwise == 'No':
+    print("in the FALSE Region")
+    is_fw = False
+
+
+print(f"Type of is_FW: {type(args.filterwise)}")
+
+# Generate arg values for printing with the report:
+print("--------------------------------------------------------------------------------------")
+print("--------------------------------------------------------------------------------------")
+print(f"All the arguments used are:")
+for arg in vars(args):
+    print(f"{arg : <20}: {getattr(args, arg)}")
+print(f"is_fw : {is_fw:>20}")
+print("--------------------------------------------------------------------------------------")
+print("--------------------------------------------------------------------------------------")
 
 # Random seed
 if args.manualSeed is None:
@@ -216,7 +239,7 @@ def main():
     # Initial training
 
     # Project the model with GSP
-    sps_tools.gsp_resnet_partial(model, sps=0.97, gsp_func = gsp_gpu, filterwise=True)
+    sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu, filterwise=is_fw)
     abs_sps, _, _ = res_tools.get_abs_sps(model)
     print(f"Total model sparsity after GSP is: {abs_sps}")
     # res_tools.prune_resnet_sps(model, target_sps = )
@@ -281,6 +304,8 @@ def main():
     print('Best acc:')
     print(best_acc)
     print(f"Best Accuracy at epochs: {acc_d}")
+
+    
 def train(trainloader, model, criterion, optimizer, epoch, use_cuda, mask):
     # switch to train mode
     model.train()
