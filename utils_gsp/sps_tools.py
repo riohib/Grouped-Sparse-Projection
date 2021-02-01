@@ -479,7 +479,7 @@ def gsp_global_apply(model, sps, arch):
 ## ================================ GSP-Resnet ================================ ##
 ## ============================================================================ ##
 
-def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
+def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu, filterwise=True):
     """
     This function is for applying GSP layer-wise in a ResNet network in this repo.
     The GSP is applied layer-wise separately.  
@@ -497,8 +497,11 @@ def gsp_resnet_partial(model, sps=0.95, gsp_func = gsp_gpu):
             w_shape = param.shape
             dim_1 = w_shape[0] * w_shape[1]
             weight_d[name] = param.detach().view(dim_1,-1)
-            param.data = gsp_func.groupedsparseproj(weight_d[name].T, sps).T.view(w_shape)
-
+    
+            if filterwise:
+                param.data = gsp_func.groupedsparseproj(weight_d[name].T, sps).T.view(w_shape)
+            else:
+                param.data = gsp_func.groupedsparseproj(weight_d[name], sps).view(w_shape)
 
 # def gsp_resnet_all_layers(model, sps=0.95, gsp_func = gsp_gpu):
 #     """

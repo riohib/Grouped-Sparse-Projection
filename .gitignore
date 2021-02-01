@@ -1,6 +1,8 @@
 cnn_lenet_5/__pycache__
+cnn_lenet_5/.ipynb_checkpoints
 cnn_lenet_5/data
 cnn_lenet_5/old_LeNet5.py
+
 
 /mlp_lenet_300/__pycache__
 /mlp_lenet_300/archived
@@ -12,6 +14,8 @@ cifar/data/
 imagenet/archived-results
 imagenet/results
 imagenet/runs
+
+utils_gsp/.ipynb_checkpoints
 
 .vscode/settings.json
 
@@ -34,6 +38,7 @@ imagenet/runs
 *.png
 *.ipynb
 *.pickle
+*.yml
 
 models.py
 prune.py

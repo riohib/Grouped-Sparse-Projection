@@ -10,7 +10,7 @@ import shutil
 import time
 import random
 from datetime import datetime
-import math
+import math 
 
 import torch
 import torch.nn as nn
@@ -21,6 +21,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import models.cifar as models
+
 import numpy as np
 
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
@@ -31,6 +32,7 @@ sys.path.append("../")
 import utils_gsp.gpu_projection as gsp_gpu
 import utils_gsp.padded_gsp as gsp_model
 import utils_gsp.sps_tools as sps_tools
+import utils_gsp.resnet_tools as res_tools
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -72,11 +74,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet20',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
-parser.add_argument('--reg', type=int, default=0, metavar='R',
-                    help='regularization type: 0:None 1:L1 2:Hoyer 3:HS')
-parser.add_argument('--decay', type=float, default=0.001, metavar='D',
-                    help='weight decay for regularizer (default: 0.001)')
-parser.add_argument('--depth', type=int, default=20, help='Model depth.')
+parser.add_argument('--depth', type=int, default=29, help='Model depth.')
 parser.add_argument('--block-name', type=str, default='BasicBlock',
                     help='the building block for Resnet and Preresnet: BasicBlock, Bottleneck (default: Basicblock for cifar10/cifar100)')
 parser.add_argument('--cardinality', type=int, default=8, help='Model cardinality (group).')
@@ -90,18 +88,17 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 #Device options
 parser.add_argument('--gpu-id', default='0', type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
-# GSP options
-parser.add_argument('--sps', type=float, default=0.96, metavar='SPS',
-                    help='gsp sparsity value (default: 0.95)')
-parser.add_argument('--savetag', type=str, default='', metavar='SPS',
-                    help='saving folder tag')                        
 
-parser.add_argument('--log-dir', type=str, default='.logs/',
-                    help='log file name')
+parser.add_argument('--sps', type=float, default=0.99, metavar='SPS',
+                    help='gsp sparsity value (default: 0.95)')
+parser.add_argument('--save-dir', type=str, default='./saves/',
+                    help='the path to the model saved after training.')
+
+parser.add_argument('--sensitivity', type=float, default=1e-4,
+                    help="value used as pruning threshold")
 
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
-
 
 # Validate dataset
 assert args.dataset == 'cifar10' or args.dataset == 'cifar100', 'Dataset can only be cifar10 or cifar100.'
@@ -109,11 +106,6 @@ assert args.dataset == 'cifar10' or args.dataset == 'cifar100', 'Dataset can onl
 # Use CUDA
 #os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 use_cuda = torch.cuda.is_available()
-
-# -------------------------- LOGGER ---------------------------------------------------- #
-summary_logger = sps_tools.create_logger(args.log_dir, 'summary')
-epoch_logger = sps_tools.create_logger(args.log_dir, 'training', if_stream = False)
-# -------------------------------------------------------------------------------------- #
 
 # Random seed
 if args.manualSeed is None:
@@ -124,21 +116,26 @@ if use_cuda:
     torch.cuda.manual_seed_all(args.manualSeed)
 
 best_acc = 0  # best test accuracy
-
-save_path = os.path.join('./results', str(args.arch)+'-'+str(args.depth) +'_' + args.savetag + '_shape_' +str(args.sps)+'_', datetime.now().strftime('%m-%d_%H-%M'))
+save_path = os.path.join(args.save_dir, str(args.arch) + str(args.depth) , '1shot_T', 'S'+str(args.sps))
 if not os.path.exists(save_path):
-    os.makedirs(save_path)
-else:
-    raise OSError('Directory {%s} exists. Use a new one.' % save_path)
+    os.makedirs(save_path, exist_ok=True)
+# else:
+#     raise OSError('Directory {%s} exists. Use a new one.' % save_path)
 
-summary_logger.info("Saving to %s", save_path)
+
+# # -------------------------- LOGGER ---------------------------------------------------- #
+# summary_logger = sps_tools.create_logger(args.log_dir, 'summary')
+# epoch_logger = sps_tools.create_logger(args.log_dir, 'training', if_stream = False)
+# # -------------------------------------------------------------------------------------- #
+
 
 def main():
     global best_acc
     start_epoch = args.start_epoch  # start from epoch 0 or last checkpoint epoch
 
+
     # Data
-    summary_logger.info('==> Preparing dataset %s' % args.dataset)
+    print('==> Preparing dataset %s' % args.dataset)
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -165,7 +162,7 @@ def main():
     testloader = data.DataLoader(testset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
 
     # Model
-    summary_logger.info("==> creating model '{}'".format(args.arch))
+    print("==> creating model '{}'".format(args.arch))
     if args.arch.startswith('resnext'):
         model = models.__dict__[args.arch](
                     cardinality=args.cardinality,
@@ -200,33 +197,67 @@ def main():
 
     model = torch.nn.DataParallel(model).cuda()
     cudnn.benchmark = True
-    summary_logger.info('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
+    print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
     # Resume
     title = 'cifar-10-' + args.arch
-    checkpoint = torch.load(os.path.join(args.resume, args.model+'.pth.tar'))
-    model.load_state_dict(checkpoint['state_dict'])
+    
+    checkpoint_base = torch.load(os.path.join(args.resume, args.model))
+    model.load_state_dict( checkpoint_base['state_dict'] )
+    
     logger = Logger(os.path.join(save_path, 'log.txt'), title=title)
     logger.set_names(['Learning Rate', 'Train Loss', 'Valid Loss', 'Train Acc.', 'Valid Acc.'])
-    summary_logger.info('model loaded')
+    print('model loaded')
 
 
-    if args.evaluate:
-        summary_logger.info('\nEvaluation only')
-        test_loss, test_acc = test(testloader, model, criterion, start_epoch, use_cuda)
-        summary_logger.info(' Test Loss:  %.8f, Test Acc:  %.2f' % (test_loss, test_acc))
-        return
+    device = torch.device("cuda")    
+    # Initial training
+
+    # Project the model with GSP
+    sps_tools.gsp_resnet_partial(model, sps=0.97, gsp_func = gsp_gpu, filterwise=True)
+    abs_sps, _, _ = res_tools.get_abs_sps(model)
+    print(f"Total model sparsity after GSP is: {abs_sps}")
+    # res_tools.prune_resnet_sps(model, target_sps = )
+
+    print("--- Pruning ---")
+    masks = {}   
+    threshold = 1e-8
+    for name, p in model.named_parameters():
+        if 'weight' in name:
+            tensor = p.data
+            masked_tensor = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), tensor)
+            mask = torch.where(abs(tensor) < threshold, torch.tensor(0.0, device=device), torch.tensor(1.0, device=device))
+            masks[name] = mask
+            p.data = masked_tensor
+
+
+
+    util.print_nonzeros(model)
+    print('Pruned model evaluation...')
+    test_loss, test_acc = test(testloader, model, criterion, start_epoch, use_cuda)
+    print(' Test Loss:  %.8f, Test Acc:  %.2f' % (test_loss, test_acc))
     
-    # import pdb; pdb.set_trace()
+    if args.evaluate:
+        return
+
+    best_prec1 = test_acc
+    torch.save(model.state_dict(), os.path.join(save_path, 'finetuned.pth'))
+    
+
+
+
+    print("--- Finetuning ---")
+
+    acc_d = {}
     # Train and val
     for epoch in range(start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch)
 
-        summary_logger.info('\nEpoch: [%d | %d] LR: %f' % (epoch + 1, args.epochs, state['lr']))
+        print('\nEpoch: [%d | %d] LR: %f' % (epoch + 1, args.epochs, state['lr']))
 
-        train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, use_cuda, args.decay)
+        train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, use_cuda, masks)
         test_loss, test_acc = test(testloader, model, criterion, epoch, use_cuda)
 
         # append logger file
@@ -235,16 +266,22 @@ def main():
         # save model
         is_best = test_acc > best_acc
         best_acc = max(test_acc, best_acc)
-        torch.save(model.state_dict(), os.path.join(save_path, 'model.pth'))
+        if is_best:
+            torch.save(model.state_dict(), os.path.join(save_path, 'finetuned.pth'))
+            acc_d[epoch] = best_acc
 
     logger.close()
     #logger.plot()
     #savefig(os.path.join(save_path, 'log.eps'))
 
-    summary_logger.info('Best acc:')
-    summary_logger.info(best_acc)
-
-def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
+    print("--- Evaluating ---")        
+    model.load_state_dict(torch.load(os.path.join(save_path, 'finetuned.pth')))
+    test_loss, test_acc = test(testloader, model, criterion, start_epoch, use_cuda)
+    print(' Test Loss:  %.8f, Test Acc:  %.2f' % (test_loss, test_acc))
+    print('Best acc:')
+    print(best_acc)
+    print(f"Best Accuracy at epochs: {acc_d}")
+def train(trainloader, model, criterion, optimizer, epoch, use_cuda, mask):
     # switch to train mode
     model.train()
 
@@ -254,7 +291,6 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
     top1 = AverageMeter()
     top5 = AverageMeter()
     end = time.time()
-    itr = 0
 
     bar = Bar('Processing', max=len(trainloader))
     for batch_idx, (inputs, targets) in enumerate(trainloader):
@@ -268,7 +304,6 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
         # compute output
         outputs = model(inputs)
         loss = criterion(outputs, targets)
-        total_loss = loss
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs.data, targets.data, topk=(1, 5))
@@ -278,22 +313,19 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda, decay):
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
+        loss.backward()
+        device = torch.device("cuda") 
+        for name, p in model.named_parameters():
+            if 'weight' in name:
+                p.grad.data = p.grad.data*mask[name]
         
-        # sparse-projection
-        if (itr % 200 == 0): #gsp every 200 iteration
-            # print("GSP-Post-ing: itr:  " + str(itr) + 'with sps: ' +str(args.sps))
-            sps_tools.gsp_resnet_partial(model, args.sps, gsp_func = gsp_gpu, filterwise=True)
-            # sps_tools.gsp_global_apply(model, args.sps, 'resnet-not-bn')
-        itr+=1
+        optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
         # plot progress
-        # bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Reg: {reg:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
         bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
                     batch=batch_idx + 1,
                     size=len(trainloader),
@@ -360,6 +392,26 @@ def test(testloader, model, criterion, epoch, use_cuda):
                         )
             bar.next()
         bar.finish()
+        
+        nonzero = total = 0
+        filter_count = filter_total = 0
+        total_sparsity = total_layer = 0
+        for name, p in model.named_parameters():
+            if 'weight' in name:
+                # tensor = p.data.cpu().numpy()
+                # tensor = np.abs(tensor)
+                # nz_count = np.count_nonzero(tensor)
+                # total_params = np.prod(tensor.shape)
+                tensor = p.data
+                tensor = torch.abs(tensor)
+                nz_count = torch.count_nonzero(tensor)
+                total_params = tensor.numel()
+                
+                nonzero += nz_count
+                total += total_params
+                
+        elt_sparsity = (total-nonzero)/total
+        print(elt_sparsity)
     return (losses.avg, top1.avg)
 
 def save_checkpoint(state, is_best, checkpoint='checkpoint', filename='checkpoint.pth.tar'):
